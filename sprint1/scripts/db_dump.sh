@@ -4,7 +4,6 @@
 # Usage: ./db_dump.sh [database_name] [output_file]
 # Defaults: database_name=fx_rate_service, output_file=fx_rate_dump.sql
 
-MYSQL_CMD="/c/Program Files/MySQL/MySQL Server 8.0/bin/mysql"
 MYSQLDUMP_CMD="/c/Program Files/MySQL/MySQL Server 8.0/bin/mysqldump"
 
 DB_NAME=${1:-fx_market_data}
