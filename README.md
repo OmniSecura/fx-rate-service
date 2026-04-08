@@ -15,6 +15,15 @@ Shell scripts for basic DBA operations on the `fx_rate_db` MySQL database.
 
 > All scripts require Git Bash on Windows and MySQL Server 8.0 installed at the default path.
 
+## Database Setup
+
+1. Create database:
+   CREATE DATABASE fx_rate_db;
+
+2. Load schema and data:
+   mysql -u root -p fx_rate_db < 00_ddl_schema.sql
+   
+
 ---
 
 ## Scripts
