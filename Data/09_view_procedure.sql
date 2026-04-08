@@ -1,4 +1,13 @@
--- views 
+-- ============================================================
+--  Stored Procedure: latest_rates_vw
+--  Returns the most recent valid spot rate for every active
+--  currency pair, with a staleness flag if the rate has not
+--  been updated in over 4 hours.
+--
+--  Example:
+--    SELECT * FROM latest_rates_vw;
+--    SELECT * FROM latest_rates_vw WHERE is_stale = 1;
+-- ============================================================
 
 -- latest_rates_vw
 
@@ -26,7 +35,19 @@ JOIN exchange_rate er
   )
 WHERE cp.is_active = 1;
 
--- rate_history_vm
+-- ============================================================
+--  View: rate_history_vw
+--  Full rate history for all pairs joined with pair and
+--  provider details, ordered newest first.
+--  Use for audit queries and historical analysis.
+--
+--  Example:
+--    SELECT * FROM rate_history_vw WHERE pair_code = 'GBP/USD';
+--    SELECT * FROM rate_history_vw WHERE pair_code = 'EUR/USD'
+--      AND DATE(rate_timestamp) = '2026-03-26';
+-- ============================================================
+
+-- rate_history_vw
 
 CREATE OR REPLACE VIEW rate_history_vw AS
 SELECT
@@ -53,7 +74,25 @@ JOIN rate_provider rp
     ON er.provider_id = rp.provider_id
 ORDER BY er.rate_timestamp DESC;
 
--- procedures
+-- ============================================================
+--  Stored Procedure: store_rate
+--  Inserts a new spot rate for a currency pair and marks all
+--  previous valid rates for that pair as stale.
+--  Calculates mid rate automatically from bid and ask.
+--  Raises an error if bid > ask.
+--
+--  Example:
+--    CALL store_rate(21, 1, 1, 1.08290, 1.08310, NOW(), 'REUTERS');
+--
+--  Arguments:
+--    p_rate_id        primary key for the new rate
+--    p_pair_id        currency pair ID
+--    p_provider_id    rate provider ID
+--    p_bid_rate       bid rate
+--    p_ask_rate       ask rate
+--    p_rate_timestamp when the rate was captured
+--    p_source_system  e.g. REUTERS, BLOOMBERG
+-- ============================================================
 
 -- store_rate
 
@@ -115,6 +154,30 @@ END $$
 
 DELIMITER ;
 
+-- ============================================================
+--  Stored Procedure: store_fixing
+--  Inserts an end-of-day fixing into eod_fixing.
+--  If the fixing rate deviates from the last traded mid rate
+--  by more than the threshold (default 1%), a WARNING alert
+--  is automatically inserted into rate_alert.
+--
+--  Example:
+--    CALL store_fixing(21, 1, 8, '2026-04-08', 1.0756, '16:00 LON', 'WMR', TRUE, NOW(), NULL);
+--    CALL store_fixing(21, 1, 8, '2026-04-08', 1.0756, '16:00 LON', 'WMR', TRUE, NOW(), 0.005);
+--
+--  Arguments:
+--    p_fixing_id      primary key for the fixing
+--    p_pair_id        currency pair ID
+--    p_provider_id    rate provider ID
+--    p_fixing_date    date of the fixing
+--    p_fixing_rate    official fixing rate
+--    p_fixing_time    e.g. '16:00 LON', '11:00 ECB'
+--    p_fixing_type    WMR / ECB / BFIX / INTERNAL
+--    p_is_official    whether this is an official benchmark fixing
+--    p_published_at   when the fixing was published
+--    p_threshold      deviation threshold e.g. 0.01 = 1% (NULL = default 1%)
+-- ============================================================
+
 -- store_fixing
 
 DELIMITER $$
@@ -129,17 +192,15 @@ CREATE PROCEDURE store_fixing (
     IN p_fixing_type  VARCHAR(20),
     IN p_is_official  BOOLEAN,
     IN p_published_at TIMESTAMP,
-    IN p_threshold    DECIMAL(5,4)   -- deviation threshold e.g. 0.01 = 1%
+    IN p_threshold    DECIMAL(5,4)
 )
 BEGIN
     DECLARE v_last_mid_rate  DECIMAL(18,6);
     DECLARE v_deviation_pct  DECIMAL(8,4);
     DECLARE v_threshold      DECIMAL(5,4);
  
-    -- default threshold to 1% if not provided
     SET v_threshold = IFNULL(p_threshold, 0.01);
  
-    -- get the latest traded mid rate for this pair
     SELECT mid_rate INTO v_last_mid_rate
     FROM exchange_rate
     WHERE pair_id = p_pair_id
@@ -147,12 +208,10 @@ BEGIN
     ORDER BY rate_timestamp DESC
     LIMIT 1;
  
-    -- calculate deviation if we have a last rate
     IF v_last_mid_rate IS NOT NULL AND v_last_mid_rate != 0 THEN
         SET v_deviation_pct = ABS((p_fixing_rate - v_last_mid_rate) / v_last_mid_rate);
  
         IF v_deviation_pct > v_threshold THEN
-            -- insert a warning alert into rate_alert
             INSERT INTO rate_alert (
                 alert_id,
                 pair_id,
@@ -180,7 +239,6 @@ BEGIN
         END IF;
     END IF;
  
-    -- insert the fixing
     INSERT INTO eod_fixing (
         fixing_id,
         pair_id,
@@ -233,7 +291,6 @@ CREATE PROCEDURE get_rate(
 BEGIN
     DECLARE v_stale_minutes INT DEFAULT 60;
 
-    -- Use caller threshold when provided; otherwise default to 60 minutes.
     IF p_stale_minutes IS NOT NULL AND p_stale_minutes > 0 THEN
         SET v_stale_minutes = p_stale_minutes;
     END IF;
@@ -305,19 +362,15 @@ main_block: BEGIN
     DECLARE v_is_stale2 BOOLEAN;
     DECLARE v_cross_rate DECIMAL(18,6);
 
-    -- Use caller threshold when provided; otherwise default to 60 minutes.
     IF p_stale_minutes IS NOT NULL AND p_stale_minutes > 0 THEN
         SET v_stale_minutes = p_stale_minutes;
     END IF;
 
-    -- Parse pair1
     SET v_base1 = SUBSTRING_INDEX(p_pair1, '/', 1);
     SET v_quote1 = SUBSTRING_INDEX(p_pair1, '/', -1);
-    -- Parse pair2
     SET v_base2 = SUBSTRING_INDEX(p_pair2, '/', 1);
     SET v_quote2 = SUBSTRING_INDEX(p_pair2, '/', -1);
 
-    -- Find common currency
     IF v_base1 = v_base2 THEN
         SET v_common = v_base1;
         SET v_cross_base = v_quote1;
@@ -335,12 +388,10 @@ main_block: BEGIN
         SET v_cross_base = v_base1;
         SET v_cross_quote = v_base2;
     ELSE
-        -- No overlap, return NULLs and exit
         SELECT NULL AS cross_pair, NULL AS cross_rate, NULL AS mid1, NULL AS mid2, NULL AS is_stale1, NULL AS is_stale2, NULL AS rate1_time, NULL AS rate2_time;
         LEAVE main_block;
     END IF;
 
-    -- Get latest valid mid rates for both pairs
     SELECT er.mid_rate, er.rate_timestamp,
            (er.rate_timestamp < (UTC_TIMESTAMP() - INTERVAL v_stale_minutes MINUTE)) AS is_stale
       INTO v_mid1, v_rate1_time, v_is_stale1
@@ -361,20 +412,15 @@ main_block: BEGIN
          ORDER BY er2.rate_timestamp DESC, er2.rate_id DESC LIMIT 1)
      WHERE cp.pair_code = p_pair2 AND cp.is_active = TRUE;
 
-    -- Calculate cross rate
     IF v_mid1 IS NULL OR v_mid2 IS NULL THEN
         SET v_cross_rate = NULL;
     ELSEIF v_common = v_quote1 AND v_common = v_base2 THEN
-        -- cross = mid1 * mid2
         SET v_cross_rate = v_mid1 * v_mid2;
     ELSEIF v_common = v_base1 AND v_common = v_quote2 THEN
-        -- cross = mid2 * mid1
         SET v_cross_rate = v_mid2 * v_mid1;
     ELSEIF v_common = v_quote1 AND v_common = v_quote2 THEN
-        -- cross = mid1 / mid2
         SET v_cross_rate = v_mid1 / v_mid2;
     ELSEIF v_common = v_base1 AND v_common = v_base2 THEN
-        -- cross = mid2 / mid1
         SET v_cross_rate = v_mid2 / v_mid1;
     ELSE
         SET v_cross_rate = NULL;
