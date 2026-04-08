@@ -1,65 +1,4 @@
-# FX Rate Service — Database Scripts
-
-Shell scripts for basic DBA operations on the `fx_rate_db` MySQL database.
-
-> All scripts require Git Bash on Windows and MySQL Server 8.0 installed at the default path.
-
----
-
-## Scripts
-
-### `db_dump.sh`
-Creates a full backup of the database — schema, data, routines and triggers — into a single `.sql` file saved in the `dumps/` folder with a timestamp in the filename.
-
-```bash
-./db_dump.sh
-```
-
----
-
-### `db_reload.sh`
-Drops the existing database and recreates it from a dump file. Useful when you want to reset your local database to a known state.
-
-```bash
-./db_reload.sh
-```
-
-By default it looks for `fx_rate_dump.sql` in the current folder. You can pass a custom dump file:
-
-```bash
-./db_reload.sh fx_rate_db fx_rate_dump.sql
-```
-
----
-
-### `rebuild_indexes.sh`
-Runs `OPTIMIZE TABLE` on all core tables and prints how long it took. Use this after bulk data loads or to keep query performance healthy.
-
-```bash
-./rebuild_indexes.sh
-```
-
----
-
-### `stale_rates_report.sh`
-Queries the database and lists all currency pairs that have not been updated in the last N hours. Default threshold is 4 hours. Output shows the pair, type, mid rate, last update time and how long ago that was.
-
-```bash
-# default — 4 hour threshold
-./stale_rates_report.sh
-
-# custom threshold, e.g. 2 hours
-./stale_rates_report.sh 2
-```
-
-Example output:
-```
-pair     type    mid_rate    last_updated          age
-EUR/USD  MAJOR   1.083150    2026-03-26 08:00:01   11d 3h 59m
-GBP/USD  MAJOR   1.296250    2026-03-26 08:00:02   11d 3h 59m
-```
-
----
+# FX Rate Service — Database
 
 ## Views & Stored Procedures
 
@@ -181,3 +120,71 @@ CALL get_cross_rate('EUR/USD', 'USD/PLN', 60);
 -- derives EUR/USD from EUR/GBP and GBP/USD
 CALL get_cross_rate('EUR/GBP', 'GBP/USD', 60);
 ```
+
+---
+
+## Schema Design Decisions
+
+The schema enforces data integrity at the database level using `CHECK` constraints, rather than relying solely on application logic. In a regulated financial environment, the database is the last line of defence — bad data that passes application validation can still be rejected at the storage layer. Each constraint below is intentional and maps directly to a business or domain rule.
+
+### `currency`
+
+| Constraint | Rule | Rationale |
+|---|---|---|
+| `chk_minor_units` | `minor_units >= 0 AND minor_units <= 4` | Minor units represent the number of decimal places for a currency (e.g. JPY = 0, USD = 2). A negative value has no meaning; values above 4 do not exist in any ISO 4217 currency and would indicate a data entry error. |
+| `chk_region` | `region IN ('EMEA', 'AMER', 'APAC')` | Region is used for routing, reporting, and desk assignment. Free-text would allow `'Europe'`, `'emea'`, or `'EUROPE'` to co-exist silently, breaking any GROUP BY or filter that depends on this field. |
+
+### `rate_provider`
+
+| Constraint | Rule | Rationale |
+|---|---|---|
+| `chk_provider_type` | `provider_type IN ('MARKET_DATA', 'CENTRAL_BANK', 'INTERNAL', 'BROKER')` | Provider type determines how rates from that source are weighted and used (e.g. central bank rates are reference-only, not tradeable). A typo like `'MARKET DATA'` would silently exclude that provider from rate selection logic. |
+| `chk_priority` | `priority >= 1` | Priority drives which source is preferred when multiple providers quote the same pair. A value of 0 or below has no defined meaning in this system and would cause unpredictable ordering behaviour. |
+
+### `currency_pair`
+
+| Constraint | Rule | Rationale |
+|---|---|---|
+| `chk_pip_size` | `pip_size > 0` | A pip is the smallest measurable price movement. Zero or negative pip sizes would break spread calculations and P&L attribution downstream. |
+| `chk_decimal_places` | `decimal_places >= 0 AND decimal_places <= 6` | Controls display precision. Negative values are nonsensical; values above 6 exceed the precision used by any standard FX instrument and would indicate a data error. |
+| `chk_different_currencies` | `base_currency <> quote_currency` | A pair where base and quote are the same currency (e.g. `USD/USD`) would always have a rate of exactly 1.0 and is meaningless. Allowing it would risk corrupting conversion calculations. |
+| `chk_pair_type` | `pair_type IN ('MAJOR', 'MINOR', 'EXOTIC', 'CROSS')` | Pair type is used to apply different liquidity assumptions, spread tolerances, and alert thresholds. An unrecognised value would silently fall outside all category-based business rules. |
+
+### `exchange_rate`
+
+| Constraint | Rule | Rationale |
+|---|---|---|
+| `chk_spread` | `bid_rate <= mid_rate AND mid_rate <= ask_rate` | This is the fundamental FX pricing rule: the market always buys at the bid (lower) and sells at the ask (higher), with mid sitting between them. A bid above ask would imply a risk-free arbitrage and indicates corrupt data. |
+| `chk_rates_positive` | `bid_rate > 0 AND ask_rate > 0 AND mid_rate > 0` | Exchange rates cannot be zero or negative. A zero rate would cause division-by-zero errors in any cross-rate or P&L calculation; a negative rate is physically impossible for a currency price. |
+| `chk_source_system` | `source_system IN ('REUTERS', 'BLOOMBERG', 'ECB_FEED', 'HSBC_INT', 'WMR', 'ICAP')` | Source system is recorded for audit and lineage purposes. Unconstrained free-text would make it impossible to reliably trace where a rate originated, which is a regulatory requirement. |
+
+### `eod_fixing`
+
+| Constraint | Rule | Rationale |
+|---|---|---|
+| `chk_fixing_rate_positive` | `fixing_rate > 0` | EOD fixings are used for fund valuations, performance measurement, and regulatory reporting. A zero or negative fixing rate would silently corrupt P&L calculations across all positions valued at that fix. |
+| `chk_fixing_type` | `fixing_type IN ('WMR', 'ECB', 'BFIX', 'INTERNAL')` | Each fixing type has a distinct legal and operational significance. An unrecognised type would be excluded from benchmark reconciliation processes without any visible error. |
+| `chk_published_after_date` | `published_at >= fixing_date` | A fixing cannot be published before the date it relates to. This constraint catches timestamp mis-mapping errors at the point of ingestion rather than during downstream reconciliation. |
+
+### `forward_rate`
+
+| Constraint | Rule | Rationale |
+|---|---|---|
+| `chk_forward_rate_positive` | `forward_rate > 0` | Forward rates must be positive. Note: `forward_points` are intentionally unconstrained — they are legitimately negative when the forward currency trades at a discount to spot. |
+| `chk_tenor` | `tenor IN ('ON', 'TN', '1W', '1M', '2M', '3M', '6M', '1Y')` | Tenors map to specific settlement date calculation conventions. An unrecognised tenor string would prevent the system from computing the correct value date, creating settlement risk. |
+| `chk_value_date_future` | `value_date >= rate_timestamp` | A forward rate's value date must fall after the rate was captured. A value date in the past would indicate a mis-keyed record that could cause incorrect settlement instructions. |
+
+### `rate_alert`
+
+| Constraint | Rule | Rationale |
+|---|---|---|
+| `chk_severity` | `severity IN ('INFO', 'WARNING', 'CRITICAL')` | Severity controls escalation paths — `CRITICAL` alerts may trigger automated desk notifications. Free-text values like `'WARN'` would silently fall outside all escalation rules. |
+| `chk_status` | `status IN ('OPEN', 'ACKNOWLEDGED', 'RESOLVED')` | Alert lifecycle management depends on this field. An unrecognised status would cause alerts to disappear from all standard dashboards without being resolved. |
+| `chk_alert_type` | `alert_type IN ('THRESHOLD_BREACH', 'STALE_RATE', 'SPREAD_WIDE', 'SPIKE')` | Alert type determines the response playbook. An unrecognised type would bypass all automated handling logic. |
+| `chk_ack_after_trigger` | `acknowledged_at IS NULL OR acknowledged_at >= triggered_at` | An acknowledgement timestamp before the alert was triggered is logically impossible and indicates a system clock or timezone error. |
+
+### `rate_audit_log`
+
+| Constraint | Rule | Rationale |
+|---|---|---|
+| `chk_action` | `action IN ('INSERT', 'UPDATE', 'INVALIDATE')` | The audit log is the authoritative record of all changes to rate data. Constraining the action field ensures the log can be reliably parsed by compliance and reconciliation tooling. |
