@@ -115,3 +115,279 @@ END $$
 
 DELIMITER ;
 
+-- store_fixing
+
+DELIMITER $$
+ 
+CREATE PROCEDURE store_fixing (
+    IN p_fixing_id    INT,
+    IN p_pair_id      INT,
+    IN p_provider_id  INT,
+    IN p_fixing_date  DATE,
+    IN p_fixing_rate  DECIMAL(18,6),
+    IN p_fixing_time  VARCHAR(10),
+    IN p_fixing_type  VARCHAR(20),
+    IN p_is_official  BOOLEAN,
+    IN p_published_at TIMESTAMP,
+    IN p_threshold    DECIMAL(5,4)   -- deviation threshold e.g. 0.01 = 1%
+)
+BEGIN
+    DECLARE v_last_mid_rate  DECIMAL(18,6);
+    DECLARE v_deviation_pct  DECIMAL(8,4);
+    DECLARE v_threshold      DECIMAL(5,4);
+ 
+    -- default threshold to 1% if not provided
+    SET v_threshold = IFNULL(p_threshold, 0.01);
+ 
+    -- get the latest traded mid rate for this pair
+    SELECT mid_rate INTO v_last_mid_rate
+    FROM exchange_rate
+    WHERE pair_id = p_pair_id
+      AND is_valid = 1
+    ORDER BY rate_timestamp DESC
+    LIMIT 1;
+ 
+    -- calculate deviation if we have a last rate
+    IF v_last_mid_rate IS NOT NULL AND v_last_mid_rate != 0 THEN
+        SET v_deviation_pct = ABS((p_fixing_rate - v_last_mid_rate) / v_last_mid_rate);
+ 
+        IF v_deviation_pct > v_threshold THEN
+            -- insert a warning alert into rate_alert
+            INSERT INTO rate_alert (
+                alert_id,
+                pair_id,
+                alert_type,
+                threshold_value,
+                actual_value,
+                alert_message,
+                severity,
+                triggered_at,
+                status
+            )
+            VALUES (
+                (SELECT IFNULL(MAX(alert_id), 0) + 1 FROM rate_alert ra),
+                p_pair_id,
+                'THRESHOLD_BREACH',
+                v_threshold,
+                v_deviation_pct,
+                CONCAT('Fixing deviation alert: fixing=', p_fixing_rate,
+                       ' lastTraded=', v_last_mid_rate,
+                       ' deviation=', ROUND(v_deviation_pct * 100, 2), '%'),
+                'WARNING',
+                NOW(),
+                'OPEN'
+            );
+        END IF;
+    END IF;
+ 
+    -- insert the fixing
+    INSERT INTO eod_fixing (
+        fixing_id,
+        pair_id,
+        provider_id,
+        fixing_date,
+        fixing_rate,
+        fixing_time,
+        fixing_type,
+        is_official,
+        published_at
+    )
+    VALUES (
+        p_fixing_id,
+        p_pair_id,
+        p_provider_id,
+        p_fixing_date,
+        p_fixing_rate,
+        p_fixing_time,
+        p_fixing_type,
+        p_is_official,
+        p_published_at
+    );
+ 
+END $$
+ 
+DELIMITER ;
+
+-- ============================================================
+--  Stored Procedure: get_rate
+--  Returns the latest valid spot rate for a pair with staleness flag.
+--
+--  Example:
+--    CALL get_rate('EUR/USD', 60);
+--
+--  Arguments:
+--    p_pair_code      currency pair code, e.g. 'EUR/USD'
+--    p_stale_minutes  staleness threshold in minutes (e.g. 60)
+-- ============================================================
+
+-- get_rate
+
+DROP PROCEDURE IF EXISTS get_rate;
+
+DELIMITER $$
+
+CREATE PROCEDURE get_rate(
+    IN p_pair_code VARCHAR(7),
+    IN p_stale_minutes INT
+)
+BEGIN
+    DECLARE v_stale_minutes INT DEFAULT 60;
+
+    -- Use caller threshold when provided; otherwise default to 60 minutes.
+    IF p_stale_minutes IS NOT NULL AND p_stale_minutes > 0 THEN
+        SET v_stale_minutes = p_stale_minutes;
+    END IF;
+
+    SELECT
+        cp.pair_code,
+        er.mid_rate,
+        er.rate_timestamp,
+        CASE
+            WHEN er.rate_timestamp IS NULL THEN NULL
+            WHEN er.rate_timestamp < (UTC_TIMESTAMP() - INTERVAL v_stale_minutes MINUTE) THEN TRUE
+            ELSE FALSE
+        END AS is_stale,
+        TIMESTAMPDIFF(MINUTE, er.rate_timestamp, UTC_TIMESTAMP()) AS age_minutes
+    FROM currency_pair cp
+    LEFT JOIN exchange_rate er
+        ON er.rate_id = (
+            SELECT er2.rate_id
+            FROM exchange_rate er2
+            WHERE er2.pair_id = cp.pair_id
+              AND er2.is_valid = TRUE
+            ORDER BY er2.rate_timestamp DESC, er2.rate_id DESC
+            LIMIT 1
+        )
+    WHERE cp.pair_code = p_pair_code
+      AND cp.is_active = TRUE;
+END$$
+
+DELIMITER ;
+
+-- ============================================================
+--  Stored Procedure: get_cross_rate
+--  Calculates implied cross rate from two overlapping pairs.
+--
+--  Example:
+--    CALL get_cross_rate('EUR/USD', 'USD/PLN', 60);
+--
+--  Arguments:
+--    p_pair1         first currency pair code, e.g. 'EUR/USD'
+--    p_pair2         second currency pair code, e.g. 'USD/PLN'
+--    p_stale_minutes staleness threshold in minutes (e.g. 60)
+-- ============================================================
+
+-- get_cross_rate 
+
+DROP PROCEDURE IF EXISTS get_cross_rate;
+
+DELIMITER $$
+
+CREATE PROCEDURE get_cross_rate(
+    IN p_pair1 VARCHAR(7),
+    IN p_pair2 VARCHAR(7),
+    IN p_stale_minutes INT
+)
+main_block: BEGIN
+    DECLARE v_stale_minutes INT DEFAULT 60;
+    DECLARE v_base1 VARCHAR(3);
+    DECLARE v_quote1 VARCHAR(3);
+    DECLARE v_base2 VARCHAR(3);
+    DECLARE v_quote2 VARCHAR(3);
+    DECLARE v_common VARCHAR(3);
+    DECLARE v_cross_base VARCHAR(3);
+    DECLARE v_cross_quote VARCHAR(3);
+    DECLARE v_mid1 DECIMAL(18,6);
+    DECLARE v_mid2 DECIMAL(18,6);
+    DECLARE v_rate1_time TIMESTAMP;
+    DECLARE v_rate2_time TIMESTAMP;
+    DECLARE v_is_stale1 BOOLEAN;
+    DECLARE v_is_stale2 BOOLEAN;
+    DECLARE v_cross_rate DECIMAL(18,6);
+
+    -- Use caller threshold when provided; otherwise default to 60 minutes.
+    IF p_stale_minutes IS NOT NULL AND p_stale_minutes > 0 THEN
+        SET v_stale_minutes = p_stale_minutes;
+    END IF;
+
+    -- Parse pair1
+    SET v_base1 = SUBSTRING_INDEX(p_pair1, '/', 1);
+    SET v_quote1 = SUBSTRING_INDEX(p_pair1, '/', -1);
+    -- Parse pair2
+    SET v_base2 = SUBSTRING_INDEX(p_pair2, '/', 1);
+    SET v_quote2 = SUBSTRING_INDEX(p_pair2, '/', -1);
+
+    -- Find common currency
+    IF v_base1 = v_base2 THEN
+        SET v_common = v_base1;
+        SET v_cross_base = v_quote1;
+        SET v_cross_quote = v_quote2;
+    ELSEIF v_base1 = v_quote2 THEN
+        SET v_common = v_base1;
+        SET v_cross_base = v_quote1;
+        SET v_cross_quote = v_base2;
+    ELSEIF v_quote1 = v_base2 THEN
+        SET v_common = v_quote1;
+        SET v_cross_base = v_base1;
+        SET v_cross_quote = v_quote2;
+    ELSEIF v_quote1 = v_quote2 THEN
+        SET v_common = v_quote1;
+        SET v_cross_base = v_base1;
+        SET v_cross_quote = v_base2;
+    ELSE
+        -- No overlap, return NULLs and exit
+        SELECT NULL AS cross_pair, NULL AS cross_rate, NULL AS mid1, NULL AS mid2, NULL AS is_stale1, NULL AS is_stale2, NULL AS rate1_time, NULL AS rate2_time;
+        LEAVE main_block;
+    END IF;
+
+    -- Get latest valid mid rates for both pairs
+    SELECT er.mid_rate, er.rate_timestamp,
+           (er.rate_timestamp < (UTC_TIMESTAMP() - INTERVAL v_stale_minutes MINUTE)) AS is_stale
+      INTO v_mid1, v_rate1_time, v_is_stale1
+      FROM currency_pair cp
+      LEFT JOIN exchange_rate er ON er.rate_id = (
+        SELECT er2.rate_id FROM exchange_rate er2
+         WHERE er2.pair_id = cp.pair_id AND er2.is_valid = TRUE
+         ORDER BY er2.rate_timestamp DESC, er2.rate_id DESC LIMIT 1)
+     WHERE cp.pair_code = p_pair1 AND cp.is_active = TRUE;
+
+    SELECT er.mid_rate, er.rate_timestamp,
+           (er.rate_timestamp < (UTC_TIMESTAMP() - INTERVAL v_stale_minutes MINUTE)) AS is_stale
+      INTO v_mid2, v_rate2_time, v_is_stale2
+      FROM currency_pair cp
+      LEFT JOIN exchange_rate er ON er.rate_id = (
+        SELECT er2.rate_id FROM exchange_rate er2
+         WHERE er2.pair_id = cp.pair_id AND er2.is_valid = TRUE
+         ORDER BY er2.rate_timestamp DESC, er2.rate_id DESC LIMIT 1)
+     WHERE cp.pair_code = p_pair2 AND cp.is_active = TRUE;
+
+    -- Calculate cross rate
+    IF v_mid1 IS NULL OR v_mid2 IS NULL THEN
+        SET v_cross_rate = NULL;
+    ELSEIF v_common = v_quote1 AND v_common = v_base2 THEN
+        -- cross = mid1 * mid2
+        SET v_cross_rate = v_mid1 * v_mid2;
+    ELSEIF v_common = v_base1 AND v_common = v_quote2 THEN
+        -- cross = mid2 * mid1
+        SET v_cross_rate = v_mid2 * v_mid1;
+    ELSEIF v_common = v_quote1 AND v_common = v_quote2 THEN
+        -- cross = mid1 / mid2
+        SET v_cross_rate = v_mid1 / v_mid2;
+    ELSEIF v_common = v_base1 AND v_common = v_base2 THEN
+        -- cross = mid2 / mid1
+        SET v_cross_rate = v_mid2 / v_mid1;
+    ELSE
+        SET v_cross_rate = NULL;
+    END IF;
+
+    SELECT CONCAT(v_cross_base, '/', v_cross_quote) AS cross_pair,
+           v_cross_rate AS cross_rate,
+           v_mid1 AS mid1,
+           v_mid2 AS mid2,
+           v_is_stale1 AS is_stale1,
+           v_is_stale2 AS is_stale2,
+           v_rate1_time AS rate1_time,
+           v_rate2_time AS rate2_time;
+END$$
+
+DELIMITER ;
