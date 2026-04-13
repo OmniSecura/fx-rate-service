@@ -11,6 +11,8 @@ public class FxRateServiceApplication {
 
 	public static void main(String[] args) {
 		SpringApplication.run(FxRateServiceApplication.class, args);
+
+
 	}
 
 }
