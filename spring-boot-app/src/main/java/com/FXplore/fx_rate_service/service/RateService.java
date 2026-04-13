@@ -4,11 +4,16 @@ import com.FXplore.fx_rate_service.model.CurrencyPair;
 import com.FXplore.fx_rate_service.model.EodFixing;
 import com.FXplore.fx_rate_service.model.ExchangeRate;
 
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+@Service
+@RequiredArgsConstructor
 public class RateService implements IRateService{
     @Override
     public void storeRate(ExchangeRate rate) {

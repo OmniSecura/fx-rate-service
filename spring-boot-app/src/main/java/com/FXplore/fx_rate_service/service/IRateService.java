@@ -3,6 +3,8 @@ package com.FXplore.fx_rate_service.service;
 import com.FXplore.fx_rate_service.model.CurrencyPair;
 import com.FXplore.fx_rate_service.model.EodFixing;
 import com.FXplore.fx_rate_service.model.ExchangeRate;
+
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
