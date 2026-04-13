@@ -1,11 +1,11 @@
 package com.FXplore.fx_rate_service.dao;
 
 import com.FXplore.fx_rate_service.model.CurrencyPair;
-import org.springframework.data.jpa.repository.JpaRepository;
+
 
 import java.util.Optional;
 
-public interface ICurrencyPairRepository extends JpaRepository<CurrencyPair, Integer> {
+public interface ICurrencyPairRepository {
 
     Optional<CurrencyPair> findByPairCode(String pairCode);
 
