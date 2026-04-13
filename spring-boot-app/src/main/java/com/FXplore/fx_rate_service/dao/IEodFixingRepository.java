@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.time.LocalDate;
 import java.util.Optional;
 
-public interface EodFixingRepository extends JpaRepository<EodFixing, Integer> {
+public interface IEodFixingRepository extends JpaRepository<EodFixing, Integer> {
 
     Optional<EodFixing> findByPairAndFixingDate(CurrencyPair pair, LocalDate fixingDate);
 

@@ -5,7 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
-public interface CurrencyPairRepository extends JpaRepository<CurrencyPair, Integer> {
+public interface ICurrencyPairRepository extends JpaRepository<CurrencyPair, Integer> {
 
     Optional<CurrencyPair> findByPairCode(String pairCode);
 

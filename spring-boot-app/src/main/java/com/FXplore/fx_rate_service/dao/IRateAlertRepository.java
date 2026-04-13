@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
-public interface RateAlertRepository extends JpaRepository<RateAlert, Integer> {
+public interface IRateAlertRepository extends JpaRepository<RateAlert, Integer> {
 
     List<RateAlert> findByPairAndStatus(String status);
 

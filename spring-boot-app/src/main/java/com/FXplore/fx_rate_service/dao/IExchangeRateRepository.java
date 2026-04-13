@@ -8,7 +8,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
-public interface ExchangeRateRepository extends JpaRepository<ExchangeRate, Integer> {
+public interface IExchangeRateRepository extends JpaRepository<ExchangeRate, Integer> {
 
     //  Latest rate
     Optional<ExchangeRate> findTopByPairOrderByRateTimestampDesc(CurrencyPair pair);
