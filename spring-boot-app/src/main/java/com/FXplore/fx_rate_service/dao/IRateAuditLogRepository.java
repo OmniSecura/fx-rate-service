@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
-public interface RateAuditLogRepository extends JpaRepository<RateAuditLog, Integer> {
+public interface IRateAuditLogRepository extends JpaRepository<RateAuditLog, Integer> {
 
     List<RateAuditLog> findByPairOrderByChangedAtDesc(CurrencyPair pair);
 }

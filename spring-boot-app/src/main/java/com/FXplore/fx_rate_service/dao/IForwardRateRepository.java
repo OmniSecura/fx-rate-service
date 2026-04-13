@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.time.LocalDate;
 import java.util.List;
 
-public interface ForwardRateRepository extends JpaRepository<ForwardRate, Integer> {
+public interface IForwardRateRepository extends JpaRepository<ForwardRate, Integer> {
 
     List<ForwardRate> findByPairAndValueDate(CurrencyPair pair, LocalDate valueDate);
 
