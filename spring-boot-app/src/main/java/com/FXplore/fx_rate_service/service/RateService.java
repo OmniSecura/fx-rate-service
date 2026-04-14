@@ -3,7 +3,10 @@ package com.FXplore.fx_rate_service.service;
 import com.FXplore.fx_rate_service.dao.ICurrencyPairRepository;
 import com.FXplore.fx_rate_service.dao.IEodFixingRepository;
 import com.FXplore.fx_rate_service.dao.IExchangeRateRepository;
+import com.FXplore.fx_rate_service.dao.IRateProviderRepository;
 import com.FXplore.fx_rate_service.exception.CurrencyPairNotFoundException;
+import com.FXplore.fx_rate_service.exception.InvalidExchangeRateException;
+import com.FXplore.fx_rate_service.exception.RateProviderNotFoundException;
 import com.FXplore.fx_rate_service.model.CurrencyPair;
 import com.FXplore.fx_rate_service.model.EodFixing;
 import com.FXplore.fx_rate_service.model.ExchangeRate;
@@ -27,12 +30,19 @@ public class RateService implements IRateService {
     private final IExchangeRateRepository exchangeRateRepository;
     private final IEodFixingRepository eodFixingRepository;
     private final ICurrencyPairRepository currencyPairRepository;
+    private final IRateProviderRepository rateProviderRepository;
 
     private static final int STALE_HOURS = 4;
 
     @Override
     @Transactional
     public void storeRate(ExchangeRate rate) {
+        if (!rateProviderRepository.existsById(rate.getProvider().getId())) {
+            throw new RateProviderNotFoundException("Rate provider not found: " + rate.getProvider().getProviderCode());
+        }
+        if (rate.getBidRate().compareTo(rate.getAskRate()) >= 0) {
+            throw new InvalidExchangeRateException("Invalid exchange rate: bid rate must be less than ask rate");
+        }
         exchangeRateRepository.save(rate);
     }
 
