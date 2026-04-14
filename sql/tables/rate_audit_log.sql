@@ -6,7 +6,7 @@
 DROP TABLE IF EXISTS rate_audit_log;
 
 CREATE TABLE rate_audit_log (
-    log_id          INT             PRIMARY KEY,
+    log_id          INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
     rate_id         INT             NOT NULL,
     pair_id         INT             NOT NULL,
     action          VARCHAR(10)     NOT NULL,   -- INSERT / UPDATE / INVALIDATE

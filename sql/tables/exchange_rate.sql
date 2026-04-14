@@ -6,7 +6,7 @@
 DROP TABLE IF EXISTS exchange_rate;
 
 CREATE TABLE exchange_rate (
-    rate_id         INT             PRIMARY KEY,
+    rate_id         INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
     pair_id         INT             NOT NULL,
     provider_id     INT             NOT NULL,
     bid_rate        DECIMAL(18,6)   NOT NULL,

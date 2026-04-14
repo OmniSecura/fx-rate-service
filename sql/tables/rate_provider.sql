@@ -6,7 +6,7 @@
 DROP TABLE IF EXISTS rate_provider;
 
 CREATE TABLE rate_provider (
-    provider_id     INT             PRIMARY KEY,
+    provider_id     INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
     provider_code   VARCHAR(15)     NOT NULL UNIQUE,
     provider_name   VARCHAR(80)     NOT NULL,
     provider_type   VARCHAR(20)     NOT NULL,   -- MARKET_DATA / CENTRAL_BANK / INTERNAL / BROKER

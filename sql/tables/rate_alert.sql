@@ -6,7 +6,7 @@
 DROP TABLE IF EXISTS rate_alert;
 
 CREATE TABLE rate_alert (
-    alert_id        INT             PRIMARY KEY,
+    alert_id        INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
     pair_id         INT             NOT NULL,
     alert_type      VARCHAR(20)     NOT NULL,   -- THRESHOLD_BREACH / STALE_RATE / SPREAD_WIDE / SPIKE
     threshold_value DECIMAL(18,6),
