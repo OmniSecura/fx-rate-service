@@ -6,7 +6,7 @@
 DROP TABLE IF EXISTS currency;
 
 CREATE TABLE currency (
-    currency_id     INT             PRIMARY KEY,
+    currency_id     INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
     iso_code        CHAR(3)         NOT NULL UNIQUE,   -- ISO 4217
     currency_name   VARCHAR(60)     NOT NULL,
     country         VARCHAR(60)     NOT NULL,

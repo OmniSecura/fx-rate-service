@@ -8,7 +8,7 @@ import java.util.List;
 
 public interface IRateAlertRepository extends JpaRepository<RateAlert, Integer> {
 
-    List<RateAlert> findByPairAndStatus(String status);
+    List<RateAlert> findByPairAndStatus(CurrencyPair pair, String status);
 
     List<RateAlert> findByPairOrderByTriggeredAtDesc(CurrencyPair pair);
 }

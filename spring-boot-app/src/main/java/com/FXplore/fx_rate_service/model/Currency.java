@@ -23,7 +23,7 @@ public class Currency implements Serializable {
     @Column(name = "currency_id", nullable = false)
     private Integer id;
 
-    @Column(name = "iso_code", nullable = false, length = 3)
+    @Column(name = "iso_code", nullable = false, columnDefinition = "CHAR(3)")
     private String isoCode;
 
     @Column(name = "currency_name", nullable = false, length = 60)
@@ -32,7 +32,7 @@ public class Currency implements Serializable {
     @Column(name = "country", nullable = false, length = 60)
     private String country;
 
-    @Column(name = "numeric_code", nullable = false, length = 3)
+    @Column(name = "numeric_code", nullable = false, columnDefinition = "CHAR(3)")
     private String numericCode;
 
     @ColumnDefault("2")

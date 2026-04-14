@@ -4,12 +4,10 @@ import com.FXplore.fx_rate_service.dao.ICurrencyPairRepository;
 import com.FXplore.fx_rate_service.dao.IEodFixingRepository;
 import com.FXplore.fx_rate_service.dao.IExchangeRateRepository;
 import com.FXplore.fx_rate_service.dao.IRateProviderRepository;
-import com.FXplore.fx_rate_service.exception.CurrencyPairNotFoundException;
-import com.FXplore.fx_rate_service.exception.InvalidExchangeRateException;
-import com.FXplore.fx_rate_service.exception.RateProviderNotFoundException;
 import com.FXplore.fx_rate_service.model.CurrencyPair;
 import com.FXplore.fx_rate_service.model.EodFixing;
 import com.FXplore.fx_rate_service.model.ExchangeRate;
+import com.FXplore.fx_rate_service.model.RateProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,23 +33,41 @@ public class RateService implements IRateService {
     private static final int STALE_HOURS = 4;
 
     @Override
+    public CurrencyPair getCurrencyPairByCode(String pairCode) {
+        return currencyPairRepository.findByPairCode(pairCode)
+                .orElseThrow(() -> new RuntimeException("Currency pair not found: " + pairCode));
+    }
+
+    @Override
+    public RateProvider getRateProviderByCode(String providerCode) {
+        return rateProviderRepository.findByProviderCode(providerCode)
+                .orElseThrow(() -> new RuntimeException("Rate provider not found: " + providerCode));
+    }
+
+    @Override
     @Transactional
-    public void storeRate(ExchangeRate rate) {
-        if (!rateProviderRepository.existsById(rate.getProvider().getId())) {
-            throw new RateProviderNotFoundException("Rate provider not found: " + rate.getProvider().getProviderCode());
-        }
-        if (rate.getBidRate().compareTo(rate.getAskRate()) >= 0) {
-            throw new InvalidExchangeRateException("Invalid exchange rate: bid rate must be less than ask rate");
-        }
+    public void storeRate(String pairCode, String providerCode, BigDecimal bid, BigDecimal ask, BigDecimal mid) {
+        CurrencyPair pair = getCurrencyPairByCode(pairCode);
+        RateProvider provider = getRateProviderByCode(providerCode);
+
+        ExchangeRate rate = new ExchangeRate();
+        rate.setPair(pair);
+        rate.setProvider(provider);
+        rate.setBidRate(bid);
+        rate.setAskRate(ask);
+        rate.setMidRate(mid);
+        rate.setRateTimestamp(Instant.now());
+        rate.setSourceSystem(provider.getProviderCode().equals("ECB") ? "ECB_FEED" : provider.getProviderCode());
+        rate.setIsValid(true);
+        rate.setIsStale(false);
+
         exchangeRateRepository.save(rate);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<ExchangeRate> getLatestRate(CurrencyPair pair) {
-        if (!currencyPairRepository.existsById(pair.getId())) {
-            throw new CurrencyPairNotFoundException("Currency pair not found: " + pair.getPairCode());
-        }
+    public Optional<ExchangeRate> getLatestRate(String pairCode) {
+        CurrencyPair pair = getCurrencyPairByCode(pairCode);
         Optional<ExchangeRate> latest = exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair);
 
         latest.ifPresent(rate -> {
@@ -65,10 +81,8 @@ public class RateService implements IRateService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ExchangeRate> getRateHistory(CurrencyPair pair, LocalDate from, LocalDate to) {
-        if (!currencyPairRepository.existsById(pair.getId())) {
-            throw new CurrencyPairNotFoundException("Currency pair not found: " + pair.getPairCode());
-        }
+    public List<ExchangeRate> getRateHistory(String pairCode, LocalDate from, LocalDate to) {
+        CurrencyPair pair = getCurrencyPairByCode(pairCode);
         Instant start = from.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant end = to.atTime(23, 59, 59).toInstant(ZoneOffset.UTC);
         return exchangeRateRepository.findByPairAndRateTimestampBetweenOrderByRateTimestampDesc(pair, start, end);
@@ -76,16 +90,10 @@ public class RateService implements IRateService {
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<BigDecimal> calculateCrossRate(CurrencyPair pairAC, CurrencyPair pairAB, CurrencyPair pairBC) {
-        if (!currencyPairRepository.existsById(pairAB.getId())) {
-            throw new CurrencyPairNotFoundException("Currency pair not found: " + pairAB.getPairCode());
-        }
-        if (!currencyPairRepository.existsById(pairBC.getId())) {
-            throw new CurrencyPairNotFoundException("Currency pair not found: " + pairBC.getPairCode());
-        }
-        if (!currencyPairRepository.existsById(pairAC.getId())) {
-            throw new CurrencyPairNotFoundException("Currency pair not found: " + pairAC.getPairCode());
-        }
+    public Optional<BigDecimal> calculateCrossRate(String pairCodeAC, String pairCodeAB, String pairCodeBC) {
+        CurrencyPair pairAB = getCurrencyPairByCode(pairCodeAB);
+        CurrencyPair pairBC = getCurrencyPairByCode(pairCodeBC);
+
         Optional<ExchangeRate> rateAB = exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pairAB);
         Optional<ExchangeRate> rateBC = exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pairBC);
 
@@ -102,20 +110,16 @@ public class RateService implements IRateService {
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<BigDecimal> convertAmount(BigDecimal amount, CurrencyPair pair) {
-        if (!currencyPairRepository.existsById(pair.getId())) {
-            throw new CurrencyPairNotFoundException("Currency pair not found: " + pair.getPairCode());
-        }
+    public Optional<BigDecimal> convertAmount(BigDecimal amount, String pairCode) {
+        CurrencyPair pair = getCurrencyPairByCode(pairCode);
         return exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair)
                 .map(rate -> amount.multiply(rate.getMidRate()).setScale(6, RoundingMode.HALF_UP));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<EodFixing> getEodFixing(CurrencyPair pair, LocalDate date) {
-        if (!currencyPairRepository.existsById(pair.getId())) {
-            throw new CurrencyPairNotFoundException("Currency pair not found: " + pair.getPairCode());
-        }
+    public Optional<EodFixing> getEodFixing(String pairCode, LocalDate date) {
+        CurrencyPair pair = getCurrencyPairByCode(pairCode);
         return eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(pair, date);
     }
 }

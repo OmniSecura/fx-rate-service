@@ -6,7 +6,7 @@
 DROP TABLE IF EXISTS currency_pair;
 
 CREATE TABLE currency_pair (
-    pair_id         INT             PRIMARY KEY,
+    pair_id         INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
     pair_code       VARCHAR(7)      NOT NULL UNIQUE,    -- e.g. EUR/USD
     base_currency   CHAR(3)         NOT NULL,
     quote_currency  CHAR(3)         NOT NULL,

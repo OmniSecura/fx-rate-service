@@ -6,7 +6,7 @@
 DROP TABLE IF EXISTS eod_fixing;
 
 CREATE TABLE eod_fixing (
-    fixing_id       INT             PRIMARY KEY,
+    fixing_id       INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
     pair_id         INT             NOT NULL,
     provider_id     INT             NOT NULL,
     fixing_date     DATE            NOT NULL,

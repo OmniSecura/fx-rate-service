@@ -32,7 +32,7 @@ public class RateProvider implements Serializable {
     @Column(name = "provider_type", nullable = false, length = 20)
     private String providerType;
 
-    @Column(name = "country", nullable = false, length = 2)
+    @Column(name = "country", nullable = false, columnDefinition = "CHAR(2)")
     private String country;
 
     @ColumnDefault("1")

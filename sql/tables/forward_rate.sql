@@ -6,7 +6,7 @@
 DROP TABLE IF EXISTS forward_rate;
 
 CREATE TABLE forward_rate (
-    forward_id      INT             PRIMARY KEY,
+    forward_id      INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
     pair_id         INT             NOT NULL,
     provider_id     INT             NOT NULL,
     tenor           VARCHAR(5)      NOT NULL,   -- ON / TN / 1W / 1M / 2M / 3M / 6M / 1Y
