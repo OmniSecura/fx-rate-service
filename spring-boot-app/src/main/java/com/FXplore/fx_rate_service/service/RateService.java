@@ -4,6 +4,9 @@ import com.FXplore.fx_rate_service.dao.ICurrencyPairRepository;
 import com.FXplore.fx_rate_service.dao.IEodFixingRepository;
 import com.FXplore.fx_rate_service.dao.IExchangeRateRepository;
 import com.FXplore.fx_rate_service.dao.IRateProviderRepository;
+import com.FXplore.fx_rate_service.exception.CurrencyPairNotFoundException;
+import com.FXplore.fx_rate_service.exception.InvalidExchangeRateException;
+import com.FXplore.fx_rate_service.exception.RateProviderNotFoundException;
 import com.FXplore.fx_rate_service.model.CurrencyPair;
 import com.FXplore.fx_rate_service.model.EodFixing;
 import com.FXplore.fx_rate_service.model.ExchangeRate;
@@ -35,18 +38,28 @@ public class RateService implements IRateService {
     @Override
     public CurrencyPair getCurrencyPairByCode(String pairCode) {
         return currencyPairRepository.findByPairCode(pairCode)
-                .orElseThrow(() -> new RuntimeException("Currency pair not found: " + pairCode));
+                .orElseThrow(() -> new CurrencyPairNotFoundException("Currency pair not found: " + pairCode));
     }
 
     @Override
     public RateProvider getRateProviderByCode(String providerCode) {
         return rateProviderRepository.findByProviderCode(providerCode)
-                .orElseThrow(() -> new RuntimeException("Rate provider not found: " + providerCode));
+                .orElseThrow(() -> new RateProviderNotFoundException("Rate provider not found: " + providerCode));
     }
 
     @Override
     @Transactional
     public void storeRate(String pairCode, String providerCode, BigDecimal bid, BigDecimal ask, BigDecimal mid) {
+        if (bid == null || ask == null || mid == null) {
+            throw new InvalidExchangeRateException("Exchange rates cannot be null");
+        }
+        if (bid.compareTo(BigDecimal.ZERO) <= 0 || ask.compareTo(BigDecimal.ZERO) <= 0 || mid.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidExchangeRateException("Exchange rates must be positive");
+        }
+        if (bid.compareTo(ask) >= 0) {
+            throw new InvalidExchangeRateException("Bid rate must be less than ask rate");
+        }
+
         CurrencyPair pair = getCurrencyPairByCode(pairCode);
         RateProvider provider = getRateProviderByCode(providerCode);
 
