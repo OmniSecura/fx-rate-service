@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.FXplore.fx_rate_service.RateServiceTest
+-------------------------------------------------------------------------------
+Tests run: 18, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.775 s -- in com.FXplore.fx_rate_service.RateServiceTest
