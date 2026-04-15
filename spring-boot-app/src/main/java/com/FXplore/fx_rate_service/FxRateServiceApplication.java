@@ -19,72 +19,93 @@ public class FxRateServiceApplication {
 		SpringApplication.run(FxRateServiceApplication.class, args);
 	}
 
+	// -------------------------------------------------------------------------
+	// DemoAll — uruchamia wszystkie przykładowe wywołania metod serwisu
+	// -------------------------------------------------------------------------
 	@Bean
-	CommandLineRunner run(IRateService rateService) {
+	CommandLineRunner demoAll(IRateService rateService) {
 		return args -> {
-
 			// --- 1. storeRate ---
-			System.out.println("\n=== storeRate ===");
+			// Stores a new exchange rate for EUR/USD provided by ECB.
+			System.out.println("\n=== [1] storeRate ===");
 			try {
-				rateService.storeRate("EUR/USD", "ECB",
-						new BigDecimal("1.0820"),
-						new BigDecimal("1.0840"),
-						new BigDecimal("1.0830"));
+				rateService.storeRate(
+				"EUR/USD", "ECB",
+				new BigDecimal("1.0820"),  // bid
+				new BigDecimal("1.0840"),  // ask
+				new BigDecimal("1.0830")   // mid
+			);
 				System.out.println("Rate stored successfully.");
 			} catch (RuntimeException e) {
 				System.out.println("Failed to store rate: " + e.getMessage());
 			}
 
 			// --- 2. getLatestRate ---
-			System.out.println("\n=== getLatestRate ===");
+			// Retrieves the most recent EUR/USD rate and checks if it is stale.
+			System.out.println("\n=== [2] getLatestRate ===");
 			try {
 				rateService.getLatestRate("EUR/USD").ifPresentOrElse(
-						r -> System.out.println("Latest EUR/USD rate: mid=" + r.getMidRate() + " stale=" + r.getIsStale()),
-						() -> System.out.println("No rate found for EUR/USD")
+					r -> System.out.println(
+						"Latest EUR/USD rate: bid=" + r.getBidRate()
+						+ " mid=" + r.getMidRate()
+						+ " ask=" + r.getAskRate()
+						+ " | stale=" + r.getIsStale()),
+					() -> System.out.println("No rate found for EUR/USD")
 				);
 			} catch (RuntimeException e) {
 				System.out.println("Failed to get latest rate: " + e.getMessage());
 			}
 
 			// --- 3. getRateHistory ---
-			System.out.println("\n=== getRateHistory ===");
+			// Lists all EUR/USD rates between 2026-03-26 and today.
+			System.out.println("\n=== [3] getRateHistory ===");
 			try {
-				rateService.getRateHistory("EUR/USD", LocalDate.now().minusDays(7), LocalDate.now())
-						.forEach(r -> System.out.println(
-								"  " + r.getRateTimestamp() + " | bid=" + r.getBidRate() + " mid=" + r.getMidRate() + " ask=" + r.getAskRate()
-						));
+				LocalDate from = LocalDate.of(2026, 3, 26);
+				LocalDate to   = LocalDate.now();
+				rateService.getRateHistory("EUR/USD", from, to)
+					.forEach(r -> System.out.println(
+						"  " + r.getRateTimestamp()
+						+ " | bid=" + r.getBidRate()
+						+ " mid=" + r.getMidRate()
+						+ " ask=" + r.getAskRate()));
 			} catch (RuntimeException e) {
 				System.out.println("Failed to get rate history: " + e.getMessage());
 			}
 
 			// --- 4. calculateCrossRate ---
-			System.out.println("\n=== calculateCrossRate ===");
+			// Calculates the cross rate for EUR/JPY using EUR/USD and USD/JPY.
+			System.out.println("\n=== [4] calculateCrossRate ===");
 			try {
-				rateService.calculateCrossRate("EUR/GBP", "EUR/USD", "GBP/USD").ifPresentOrElse(
-						r -> System.out.println("Cross rate EUR/GBP = " + r),
-						() -> System.out.println("Insufficient data to calculate cross rate")
+				rateService.calculateCrossRate("EUR/JPY", "EUR/USD", "USD/JPY").ifPresentOrElse(
+					r -> System.out.println("Cross rate EUR/JPY = " + r),
+					() -> System.out.println("Insufficient data to calculate cross rate")
 				);
 			} catch (RuntimeException e) {
 				System.out.println("Failed to calculate cross rate: " + e.getMessage());
 			}
 
 			// --- 5. convertAmount ---
-			System.out.println("\n=== convertAmount ===");
+			// Converts 1000 EUR to USD using the latest EUR/USD rate.
+			System.out.println("\n=== [5] convertAmount ===");
 			try {
 				rateService.convertAmount(new BigDecimal("1000.00"), "EUR/USD").ifPresentOrElse(
-						r -> System.out.println("1000 EUR = " + r + " USD"),
-						() -> System.out.println("No rate available for conversion")
+					r -> System.out.println("1000 EUR = " + r + " USD"),
+					() -> System.out.println("No rate available for conversion")
 				);
 			} catch (RuntimeException e) {
 				System.out.println("Failed to convert amount: " + e.getMessage());
 			}
 
 			// --- 6. getEodFixing ---
-			System.out.println("\n=== getEodFixing ===");
+			// Retrieves the official end-of-day fixing for EUR/USD on 2026-03-25.
+			System.out.println("\n=== [6] getEodFixing ===");
 			try {
-				rateService.getEodFixing("EUR/USD", LocalDate.now()).ifPresentOrElse(
-						f -> System.out.println("EOD fixing EUR/USD: " + f.getFixingRate()),
-						() -> System.out.println("No EOD fixing found for EUR/USD today")
+				rateService.getEodFixing("EUR/USD", LocalDate.of(2026, 3, 25)).ifPresentOrElse(
+					f -> System.out.println(
+						"EOD fixing EUR/USD on 2026-03-25: rate=" + f.getFixingRate()
+						+ " type=" + f.getFixingType()
+						+ " official=" + f.getIsOfficial()),
+					() -> System.out.println("No EOD fixing found for EUR/USD on 2026-03-25")
 				);
 			} catch (RuntimeException e) {
 				System.out.println("Failed to get EOD fixing: " + e.getMessage());
@@ -92,4 +113,3 @@ public class FxRateServiceApplication {
 		};
 	}
 }
-
