@@ -1,5 +1,6 @@
 package com.FXplore.fx_rate_service.service;
 
+import com.FXplore.fx_rate_service.model.Currency;
 import com.FXplore.fx_rate_service.model.CurrencyPair;
 import com.FXplore.fx_rate_service.model.EodFixing;
 import com.FXplore.fx_rate_service.model.ExchangeRate;
@@ -34,4 +35,10 @@ public interface IRateService {
 
     // Return the official end-of-day fixing for a pair on a given date
     Optional<EodFixing> getEodFixing(String pairCode, LocalDate date);
+
+    // Return the latest rate per pair where the rate is older than 4 hours
+    List<ExchangeRate> getStaleRates();
+
+    // Return all active currencies
+    List<Currency> getAllActiveCurrencies();
 }

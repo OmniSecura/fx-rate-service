@@ -20,7 +20,7 @@ public class FxRateServiceApplication {
 	}
 
 	// -------------------------------------------------------------------------
-	// DemoAll — uruchamia wszystkie przykładowe wywołania metod serwisu
+	// DemoAll — starts akk service methods with sample data and prints results to console.
 	// -------------------------------------------------------------------------
 	@Bean
 	CommandLineRunner demoAll(IRateService rateService) {
