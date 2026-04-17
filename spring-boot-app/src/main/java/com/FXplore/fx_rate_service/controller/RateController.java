@@ -55,23 +55,23 @@ public class RateController {
     }
 
     /**
-     * GET /api/rates/{pair}
+     * GET /api/rates?pair=EUR/USD
      * Get the latest rate for a currency pair (e.g. EUR/USD).
      */
-    @GetMapping("/rates/{pair}")
-    public ResponseEntity<ExchangeRateResponse> getLatestRate(@PathVariable String pair) {
+    @GetMapping("/rates")
+    public ResponseEntity<ExchangeRateResponse> getLatestRate(@RequestParam String pair) {
         return rateService.getLatestRate(pair)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     /**
-     * GET /api/rates/{pair}/history?from=2026-01-01&to=2026-04-16
+     * GET /api/rates/history?pair=EUR/USD&from=2026-01-01&to=2026-04-16
      * Get rate history for a pair within a date range.
      */
-    @GetMapping("/rates/{pair}/history")
+    @GetMapping("/rates/history")
     public ResponseEntity<List<ExchangeRateResponse>> getRateHistory(
-            @PathVariable String pair,
+            @RequestParam String pair,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return ResponseEntity.ok(rateService.getRateHistory(pair, from, to));
@@ -93,12 +93,12 @@ public class RateController {
     }
 
     /**
-     * GET /api/fixings/{pair}?date=2026-04-07
+     * GET /api/fixings?pair=EUR/USD&date=2026-04-07
      * Get the official EOD fixing for a pair on a given date.
      */
-    @GetMapping("/fixings/{pair}")
+    @GetMapping("/fixings")
     public ResponseEntity<EodFixingResponse> getEodFixing(
-            @PathVariable String pair,
+            @RequestParam String pair,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return rateService.getEodFixing(pair, date)
                 .map(ResponseEntity::ok)
