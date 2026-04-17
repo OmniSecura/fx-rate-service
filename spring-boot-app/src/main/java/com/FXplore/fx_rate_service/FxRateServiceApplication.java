@@ -46,10 +46,10 @@ public class FxRateServiceApplication {
 			try {
 				rateService.getLatestRate("EUR/USD").ifPresentOrElse(
 					r -> System.out.println(
-						"Latest EUR/USD rate: bid=" + r.getBidRate()
-						+ " mid=" + r.getMidRate()
-						+ " ask=" + r.getAskRate()
-						+ " | stale=" + r.getIsStale()),
+						"Latest EUR/USD rate: bid=" + r.bidRate()
+						+ " mid=" + r.midRate()
+						+ " ask=" + r.askRate()
+						+ " | stale=" + r.isStale()),
 					() -> System.out.println("No rate found for EUR/USD")
 				);
 			} catch (RuntimeException e) {
@@ -64,10 +64,10 @@ public class FxRateServiceApplication {
 				LocalDate to   = LocalDate.now();
 				rateService.getRateHistory("EUR/USD", from, to)
 					.forEach(r -> System.out.println(
-						"  " + r.getRateTimestamp()
-						+ " | bid=" + r.getBidRate()
-						+ " mid=" + r.getMidRate()
-						+ " ask=" + r.getAskRate()));
+						"  " + r.rateTimestamp()
+						+ " | bid=" + r.bidRate()
+						+ " mid=" + r.midRate()
+						+ " ask=" + r.askRate()));
 			} catch (RuntimeException e) {
 				System.out.println("Failed to get rate history: " + e.getMessage());
 			}
@@ -89,7 +89,7 @@ public class FxRateServiceApplication {
 			System.out.println("\n=== [5] convertAmount ===");
 			try {
 				rateService.convertAmount(new BigDecimal("1000.00"), "EUR/USD").ifPresentOrElse(
-					r -> System.out.println("1000 EUR = " + r + " USD"),
+					r -> System.out.println("1000 EUR = " + r.convertedAmount() + " USD"),
 					() -> System.out.println("No rate available for conversion")
 				);
 			} catch (RuntimeException e) {
@@ -102,9 +102,9 @@ public class FxRateServiceApplication {
 			try {
 				rateService.getEodFixing("EUR/USD", LocalDate.of(2026, 3, 25)).ifPresentOrElse(
 					f -> System.out.println(
-						"EOD fixing EUR/USD on 2026-03-25: rate=" + f.getFixingRate()
-						+ " type=" + f.getFixingType()
-						+ " official=" + f.getIsOfficial()),
+						"EOD fixing EUR/USD on 2026-03-25: rate=" + f.fixingRate()
+						+ " type=" + f.fixingType()
+						+ " official=" + f.isOfficial()),
 					() -> System.out.println("No EOD fixing found for EUR/USD on 2026-03-25")
 				);
 			} catch (RuntimeException e) {
