@@ -78,3 +78,73 @@ pair     type    mid_rate    last_updated          age
 EUR/USD  MAJOR   1.083150    2026-03-26 08:00:01   11d 3h 59m
 GBP/USD  MAJOR   1.296250    2026-03-26 08:00:02   11d 3h 59m
 ```
+
+---
+
+## Docker Setup (App + MySQL)
+
+The project now includes:
+
+- `spring-boot-app/Dockerfile` for the Spring Boot API
+- `docker-compose.yml` for running API + MySQL together
+- `docker/mysql/init/00-load-schema-data.sh` to initialize schema, seed data, views, and procedures
+
+### Prerequisites
+
+- Docker Desktop installed and running
+- Ports `8080` (app) and `3306` (MySQL) available
+
+### Start with Docker Compose
+
+Run from repository root:
+
+```powershell
+Set-Location "C:\Users\Administrator\Desktop\FinalProject17.04\fx-rate-service"
+docker compose up --build -d
+```
+
+Check status:
+
+```powershell
+docker compose ps
+```
+
+Tail logs:
+
+```powershell
+docker compose logs -f app
+docker compose logs -f db
+```
+
+### Verify services
+
+- API base: `http://localhost:8080/api`
+- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+
+Quick endpoint test:
+
+```powershell
+Invoke-WebRequest "http://localhost:8080/api/currencies" | Select-Object -ExpandProperty StatusCode
+```
+
+Expected status code: `200`
+
+### Stop services
+
+```powershell
+docker compose down
+```
+
+### Reset database completely (delete MySQL volume)
+
+```powershell
+docker compose down -v
+docker compose up --build -d
+```
+
+### Notes
+
+- MySQL data persists in named volume `mysql_data`.
+- DB init scripts run only when the volume is empty.
+- App uses environment-based DB settings from `application.properties` fallbacks.
