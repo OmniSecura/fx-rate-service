@@ -9,6 +9,7 @@ import com.FXplore.fx_rate_service.dto.ConversionResponse;
 import com.FXplore.fx_rate_service.dto.CurrencyResponse;
 import com.FXplore.fx_rate_service.dto.EodFixingResponse;
 import com.FXplore.fx_rate_service.dto.ExchangeRateResponse;
+import com.FXplore.fx_rate_service.dto.StoreRateRequest;
 import com.FXplore.fx_rate_service.exception.CurrencyPairNotFoundException;
 import com.FXplore.fx_rate_service.exception.InvalidExchangeRateException;
 import com.FXplore.fx_rate_service.exception.RateProviderNotFoundException;
@@ -70,8 +71,9 @@ public class RateService implements IRateService {
         if (bid.compareTo(BigDecimal.ZERO) <= 0 || ask.compareTo(BigDecimal.ZERO) <= 0 || mid.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidExchangeRateException("Exchange rates must be positive");
         }
-        if (bid.compareTo(ask) >= 0) {
-            throw new InvalidExchangeRateException("Bid rate must be less than ask rate");
+        // Reuse the same spread rule enforced at the DTO layer (bid < mid < ask)
+        if (!StoreRateRequest.isValidSpread(bid, mid, ask)) {
+            throw new InvalidExchangeRateException("Bid/ask spread invalid: required bid < mid < ask");
         }
 
         CurrencyPair pair = getCurrencyPairByCode(pairCode);
