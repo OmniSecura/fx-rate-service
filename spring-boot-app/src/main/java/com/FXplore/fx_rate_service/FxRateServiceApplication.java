@@ -7,12 +7,14 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @SpringBootApplication
 @Import(AppConfiguration.class)
+@EnableScheduling
 public class FxRateServiceApplication {
 
 	public static void main(String[] args) {
