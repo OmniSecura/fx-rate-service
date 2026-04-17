@@ -21,7 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -42,15 +41,11 @@ public class RateService implements IRateService {
     private final ICurrencyRepository currencyRepository;
 
     private static final int STALE_HOURS = 4;
-    private static final BigDecimal FIXING_DEVIATION_ALERT_THRESHOLD_PCT = new BigDecimal("0.50");
 
     @Override
     public CurrencyPair getCurrencyPairByCode(String pairCode) {
         return currencyPairRepository.findByPairCode(pairCode)
-                .orElseThrow(() -> {
-                    log.error("Unknown currency pair: {} not found in reference data", pairCode);
-                    return new CurrencyPairNotFoundException("Currency pair not found: " + pairCode);
-                });
+                .orElseThrow(() -> new CurrencyPairNotFoundException("Currency pair not found: " + pairCode));
     }
 
     @Override
@@ -98,14 +93,12 @@ public class RateService implements IRateService {
         Optional<ExchangeRate> latest = exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair);
 
         latest.ifPresent(rate -> {
-            Instant now = Instant.now();
             boolean isStale = rate.getRateTimestamp()
-                    .isBefore(now.minus(STALE_HOURS, ChronoUnit.HOURS));
+                    .isBefore(Instant.now().minus(STALE_HOURS, ChronoUnit.HOURS));
             rate.setIsStale(isStale);
             if (isStale) {
-                Duration age = Duration.between(rate.getRateTimestamp(), now);
-                log.warn("Stale rate detected: pair={} lastUpdated={} age={}h {}m",
-                        pairCode, rate.getRateTimestamp(), age.toHours(), age.minusHours(age.toHours()).toMinutes());
+                log.warn("Stale rate detected: pair={} lastUpdated={} age={}h",
+                        pairCode, rate.getRateTimestamp(), STALE_HOURS);
             }
         });
 
@@ -138,7 +131,7 @@ public class RateService implements IRateService {
                 .multiply(rateBC.get().getMidRate())
                 .setScale(6, RoundingMode.HALF_UP);
 
-        log.info("Cross rate calculated: {}={} {}={} -> {}={}",
+        log.info("Cross rate calculated: {}={} {}={} → {}={}",
                 pairCodeAB, rateAB.get().getMidRate(),
                 pairCodeBC, rateBC.get().getMidRate(),
                 pairCodeAC, crossRate);
@@ -153,7 +146,7 @@ public class RateService implements IRateService {
         return exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair)
                 .map(rate -> {
                     BigDecimal result = amount.multiply(rate.getMidRate()).setScale(6, RoundingMode.HALF_UP);
-                    log.info("Conversion: {} {} -> {} {} rate={} asOf={}",
+                    log.info("Conversion: {} {} → {} {} rate={} asOf={}",
                             amount, pair.getBaseCurrency().getIsoCode(),
                             result, pair.getQuoteCurrency().getIsoCode(),
                             rate.getMidRate(), rate.getRateTimestamp());
@@ -165,32 +158,7 @@ public class RateService implements IRateService {
     @Transactional(readOnly = true)
     public Optional<EodFixing> getEodFixing(String pairCode, LocalDate date) {
         CurrencyPair pair = getCurrencyPairByCode(pairCode);
-        Optional<EodFixing> fixing = eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(pair, date);
-
-        fixing.ifPresent(f -> {
-            String source = f.getProvider() != null ? f.getProvider().getProviderCode() : "UNKNOWN";
-            log.info("EOD fixing stored: pair={} date={} fixingRate={} source={}",
-                    pairCode, f.getFixingDate(), f.getFixingRate(), source);
-
-            exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair).ifPresent(latest -> {
-                BigDecimal lastTraded = latest.getMidRate();
-                if (lastTraded != null && lastTraded.compareTo(BigDecimal.ZERO) > 0) {
-                    BigDecimal deviationPct = f.getFixingRate()
-                            .subtract(lastTraded)
-                            .abs()
-                            .divide(lastTraded, 6, RoundingMode.HALF_UP)
-                            .multiply(new BigDecimal("100"))
-                            .setScale(2, RoundingMode.HALF_UP);
-
-                    if (deviationPct.compareTo(FIXING_DEVIATION_ALERT_THRESHOLD_PCT) > 0) {
-                        log.warn("Fixing deviation alert: pair={} fixing={} lastTraded={} deviation={}%%",
-                                pairCode, f.getFixingRate(), lastTraded, deviationPct);
-                    }
-                }
-            });
-        });
-
-        return fixing;
+        return eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(pair, date);
     }
 
     @Override
@@ -200,9 +168,8 @@ public class RateService implements IRateService {
         List<ExchangeRate> staleRates = exchangeRateRepository.findStaleRates(threshold);
         staleRates.forEach(rate -> {
             rate.setIsStale(true);
-            Duration age = Duration.between(rate.getRateTimestamp(), Instant.now());
-            log.warn("Stale rate detected: pair={} lastUpdated={} age={}h {}m",
-                    rate.getPair().getPairCode(), rate.getRateTimestamp(), age.toHours(), age.minusHours(age.toHours()).toMinutes());
+            log.warn("Stale rate detected: pair={} lastUpdated={} age={}h",
+                    rate.getPair().getPairCode(), rate.getRateTimestamp(), STALE_HOURS);
         });
         return staleRates;
     }
