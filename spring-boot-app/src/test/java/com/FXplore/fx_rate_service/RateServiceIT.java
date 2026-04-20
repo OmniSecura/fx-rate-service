@@ -10,6 +10,7 @@ import com.FXplore.fx_rate_service.exception.RateProviderNotFoundException;
 import com.FXplore.fx_rate_service.service.IRateService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -35,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *   - 0  eod fixings     (table is empty in seed data)
  */
 @Transactional
+@Sql(scripts = "classpath:cleanup.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 class RateServiceIT extends AbstractIntegrationTest {
 
     @Autowired

@@ -4,18 +4,18 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Base class for all integration tests (*IT.java).
  *
- * Uses the Testcontainers Singleton pattern with the official JUnit 5 extension:
- *   - {@code @Testcontainers} activates the JUnit 5 extension that manages
- *     container lifecycle automatically (start before tests, stop after).
- *   - {@code @Container} on a <b>static</b> field means the container is shared
- *     across ALL test methods in ALL subclasses within the same JVM run
- *     (one container start per Maven build, not per test class).
+ * Uses the TRUE Testcontainers Singleton pattern:
+ *   - The container is declared as a static field and started in a static initialiser.
+ *   - This means ONE container is started for the entire JVM / Maven build, regardless
+ *     of how many IT subclasses exist.  The JVM shutdown hook (Ryuk) stops it at the end.
+ *   - We intentionally do NOT use @Testcontainers + @Container here, because that
+ *     annotation pair ties the container lifecycle to the test-class lifecycle — the
+ *     container would be stopped after the first class finishes and the second class
+ *     would get "Connection refused".
  *
  * Schema and seed data are loaded automatically by Spring Boot via:
  *   src/test/resources/schema.sql  – DDL (tables, indexes, constraints)
@@ -26,22 +26,25 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * the test, to keep each test isolated from the shared seed data.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
 public abstract class AbstractIntegrationTest {
 
     /**
-     * Single MySQL 8.0 container shared by all IT subclasses (Singleton pattern).
+     * Single MySQL 8.0 container shared by ALL IT subclasses in the same JVM run.
      *
-     * Static + @Container = JUnit 5 extension starts it once before the first test
-     * class that uses it and stops it after the last one finishes.
-     * This is the recommended Testcontainers approach for Spring Boot integration tests.
+     * Started eagerly in the static initialiser block below — not by @Container —
+     * so it is never stopped between test classes.
      */
-    @Container
     static final MySQLContainer<?> MYSQL =
             new MySQLContainer<>("mysql:8.0")
                     .withDatabaseName("fx_test")
                     .withUsername("test")
                     .withPassword("test");
+
+    // Start the container once for the whole test suite.
+    // Testcontainers registers a JVM shutdown hook (via Ryuk) to stop it automatically.
+    static {
+        MYSQL.start();
+    }
 
     /**
      * Injects the Testcontainers-assigned JDBC URL, credentials and Hibernate settings
@@ -61,7 +64,9 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.jpa.hibernate.ddl-auto",       () -> "none");
         registry.add("spring.jpa.database-platform",        () -> "org.hibernate.dialect.MySQLDialect");
         registry.add("spring.sql.init.mode",                () -> "always");
-        // Disable the scheduler during integration tests to avoid background noise in logs
-        registry.add("spring.task.scheduling.pool.size",    () -> "0");
+        // Keep pool size at the minimum valid value (scheduler bean must exist but
+        // should not fire during tests — disabled via @ConditionalOnProperty).
+        registry.add("spring.task.scheduling.pool.size",    () -> "1");
+        registry.add("app.scheduling.enabled",              () -> "false");
     }
 }

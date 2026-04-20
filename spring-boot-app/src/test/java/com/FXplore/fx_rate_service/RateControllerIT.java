@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.jdbc.Sql;
 
 import java.util.List;
 import java.util.Map;
@@ -19,10 +20,11 @@ import static org.junit.jupiter.api.Assertions.*;
  *   - The full request/response cycle is exercised (serialisation, validation,
  *     exception handlers, HTTP status codes).
  *   - {@code @Transactional} does NOT roll back writes here (different thread),
- *     so write tests either verify the response only, or clean up after themselves.
+ *     so cleanup.sql runs before this class to restore seed state.
  *
  * Seed data (data.sql): 20 currencies, 20 pairs, 20 stale exchange rates (2026-03-26).
  */
+@Sql(scripts = "classpath:cleanup.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 class RateControllerIT extends AbstractIntegrationTest {
 
     @Autowired
@@ -150,6 +152,7 @@ class RateControllerIT extends AbstractIntegrationTest {
     // ================================================================
 
     @Test
+    @Sql(scripts = "classpath:cleanup.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
     void postRates_withValidRequest_returns201WithMessage() {
         // Given
         String body = """
