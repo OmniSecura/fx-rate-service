@@ -11,6 +11,8 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -31,6 +33,7 @@ public class RateController {
      * POST /api/rates
      * Store a new exchange rate.
      */
+    @Operation(tags = "rates", summary = "Store a new exchange rate")
     @PostMapping("/rates")
     public ResponseEntity<Map<String, String>> storeRate(@Valid @RequestBody StoreRateRequest request) {
         rateService.storeRate(
@@ -49,6 +52,7 @@ public class RateController {
      * GET /api/rates/stale
      * List all pairs with stale rates (no update in 4+ hours).
      */
+    @Operation(tags = "rates", summary = "List all pairs with stale rates")
     @GetMapping("/rates/stale")
     public ResponseEntity<List<ExchangeRateResponse>> getStaleRates() {
         return ResponseEntity.ok(rateService.getStaleRates());
@@ -58,6 +62,7 @@ public class RateController {
      * GET /api/rates?pair=EUR/USD
      * Get the latest rate for a currency pair (e.g. EUR/USD).
      */
+    @Operation(tags = "rates", summary = "Get latest rate for a currency pair")
     @GetMapping("/rates")
     public ResponseEntity<ExchangeRateResponse> getLatestRate(@RequestParam String pair) {
         return rateService.getLatestRate(pair)
@@ -69,6 +74,7 @@ public class RateController {
      * GET /api/rates/history?pair=EUR/USD&from=2026-01-01&to=2026-04-16
      * Get rate history for a pair within a date range.
      */
+    @Operation(tags = "rates", summary = "Get rate history for a pair")
     @GetMapping("/rates/history")
     public ResponseEntity<List<ExchangeRateResponse>> getRateHistory(
             @RequestParam String pair,
@@ -81,6 +87,7 @@ public class RateController {
      * GET /api/convert?from=GBP&to=USD&amount=10000
      * Convert an amount between two currencies using the latest mid rate.
      */
+    @Operation(tags = "conversion", summary = "Convert amount between two currencies")
     @GetMapping("/convert")
     public ResponseEntity<ConversionResponse> convertAmount(
             @RequestParam String from,
@@ -96,6 +103,7 @@ public class RateController {
      * GET /api/fixings?pair=EUR/USD&date=2026-04-07
      * Get the official EOD fixing for a pair on a given date.
      */
+    @Operation(tags = "fixings", summary = "Get official EOD fixing for a pair on a given date")
     @GetMapping("/fixings")
     public ResponseEntity<EodFixingResponse> getEodFixing(
             @RequestParam String pair,
@@ -109,6 +117,7 @@ public class RateController {
      * GET /api/currencies
      * List all active currencies.
      */
+    @Operation(tags = "currencies", summary = "List all active currencies")
     @GetMapping("/currencies")
     public ResponseEntity<List<CurrencyResponse>> getAllActiveCurrencies() {
         return ResponseEntity.ok(rateService.getAllActiveCurrencies());
