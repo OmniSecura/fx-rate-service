@@ -27,12 +27,26 @@ const styles = `
   html, body, #root { height: 100%; }
 
   body {
-    background: var(--bg);
+    background: linear-gradient(135deg, var(--bg) 0%, var(--bg2) 100%);
     color: var(--text);
     font-family: var(--font-mono);
     font-size: 13px;
     line-height: 1.6;
     overflow-x: hidden;
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at 20% 80%, rgba(200, 149, 42, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(74, 158, 255, 0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: -1;
   }
 
   /* LAYOUT */
@@ -74,14 +88,15 @@ const styles = `
 
   .logo-dot {
     width: 6px; height: 6px;
-    background: var(--gold);
+    background: linear-gradient(45deg, var(--gold), var(--gold2));
     border-radius: 50%;
     animation: pulse 2s ease-in-out infinite;
+    box-shadow: 0 0 8px var(--gold);
   }
 
   @keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(0.7); }
+    0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 8px var(--gold); }
+    50% { opacity: 0.7; transform: scale(0.8); box-shadow: 0 0 16px var(--gold2); }
   }
 
   .topbar-ticker {
@@ -95,6 +110,7 @@ const styles = `
     gap: 32px;
     animation: ticker 30s linear infinite;
     white-space: nowrap;
+    filter: drop-shadow(0 0 4px rgba(200, 149, 42, 0.3));
   }
 
   @keyframes ticker {
@@ -148,28 +164,47 @@ const styles = `
     align-items: center;
     gap: 10px;
     padding: 9px 10px;
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
     color: var(--text-dim);
     font-family: var(--font-mono);
     font-size: 13px;
-    transition: all 0.15s;
+    transition: all 0.2s ease;
     border: 1px solid transparent;
     background: none;
     width: 100%;
     text-align: left;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .nav-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(200, 149, 42, 0.1), transparent);
+    transition: left 0.5s;
+  }
+
+  .nav-item:hover::before {
+    left: 100%;
   }
 
   .nav-item:hover {
     color: var(--text);
     background: var(--bg3);
     border-color: var(--border);
+    transform: translateX(4px);
   }
 
   .nav-item.active {
     color: var(--gold2);
     background: rgba(200, 149, 42, 0.08);
     border-color: var(--gold-dim);
+    box-shadow: 0 0 12px rgba(200, 149, 42, 0.2);
   }
 
   .nav-icon { width: 16px; text-align: center; opacity: 0.8; }
@@ -211,8 +246,15 @@ const styles = `
   .card {
     background: var(--bg2);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 12px;
     overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+  }
+
+  .card:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    transform: translateY(-2px);
   }
 
   .card-header {
@@ -243,10 +285,28 @@ const styles = `
 
   /* STAT TILES */
   .stat-tile {
-    background: var(--bg2);
+    background: linear-gradient(135deg, var(--bg2) 0%, var(--bg3) 100%);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px 18px;
+    border-radius: 12px;
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+
+  .stat-tile::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--gold), var(--gold2));
+  }
+
+  .stat-tile:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
   }
 
   .stat-label {
@@ -354,24 +414,52 @@ const styles = `
 
   /* BUTTONS */
   .btn {
-    padding: 9px 18px;
-    border-radius: 6px;
+    padding: 10px 20px;
+    border-radius: 8px;
     font-family: var(--font-mono);
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     border: none;
-    transition: all 0.15s;
+    transition: all 0.2s ease;
     white-space: nowrap;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: left 0.5s;
+  }
+
+  .btn:hover::before {
+    left: 100%;
   }
 
   .btn-primary {
-    background: var(--gold);
+    background: linear-gradient(135deg, var(--gold), var(--gold2));
     color: #080b0f;
+    box-shadow: 0 2px 8px rgba(200, 149, 42, 0.3);
   }
 
-  .btn-primary:hover { background: var(--gold2); }
-  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary:hover {
+    background: linear-gradient(135deg, var(--gold2), var(--gold));
+    box-shadow: 0 4px 16px rgba(200, 149, 42, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
 
   .btn-ghost {
     background: transparent;
@@ -383,12 +471,25 @@ const styles = `
 
   /* RESULT BOX */
   .result-box {
-    background: var(--bg3);
+    background: linear-gradient(135deg, var(--bg3) 0%, var(--bg2) 100%);
     border: 1px solid var(--border2);
-    border-radius: 8px;
-    padding: 20px;
+    border-radius: 12px;
+    padding: 24px;
     margin-top: 16px;
-    animation: fadeIn 0.2s ease;
+    animation: fadeIn 0.3s ease;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .result-box::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--gold), var(--gold2), var(--gold));
   }
 
   @keyframes fadeIn {
@@ -458,14 +559,35 @@ const styles = `
   }
 
   .currency-card {
-    background: var(--bg3);
+    background: linear-gradient(135deg, var(--bg3) 0%, var(--bg2) 100%);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 12px 14px;
-    transition: border-color 0.15s;
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
   }
 
-  .currency-card:hover { border-color: var(--border2); }
+  .currency-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(74, 158, 255, 0.05), transparent);
+    transition: left 0.6s;
+  }
+
+  .currency-card:hover::before {
+    left: 100%;
+  }
+
+  .currency-card:hover {
+    border-color: var(--border2);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
 
   .currency-iso {
     font-family: var(--font-head);
