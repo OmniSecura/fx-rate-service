@@ -144,6 +144,10 @@
                         <goals><goal>prepare-agent</goal></goals>
                         <configuration>
                             <destFile>${project.build.directory}/jacoco-unit.exec</destFile>
+                            <excludes>
+                                <!-- Bootstrap/demo class — no business logic to measure -->
+                                <exclude>com/FXplore/fx_rate_service/FxRateServiceApplication.class</exclude>
+                            </excludes>
                         </configuration>
                     </execution>
                     <execution>
@@ -154,6 +158,9 @@
                             <dataFile>${project.build.directory}/jacoco-unit.exec</dataFile>
                             <outputDirectory>${project.reporting.outputDirectory}/jacoco-unit</outputDirectory>
                             <title>Unit Tests Coverage</title>
+                            <excludes>
+                                <exclude>com/FXplore/fx_rate_service/FxRateServiceApplication.class</exclude>
+                            </excludes>
                         </configuration>
                     </execution>
 
@@ -165,6 +172,10 @@
                         <configuration>
                             <destFile>${project.build.directory}/jacoco-integration.exec</destFile>
                             <propertyName>failsafe.argLine</propertyName>
+                            <excludes>
+                                <!-- Bootstrap/demo class — no business logic to measure -->
+                                <exclude>com/FXplore/fx_rate_service/FxRateServiceApplication.class</exclude>
+                            </excludes>
                         </configuration>
                     </execution>
                     <execution>
@@ -175,6 +186,9 @@
                             <dataFile>${project.build.directory}/jacoco-integration.exec</dataFile>
                             <outputDirectory>${project.reporting.outputDirectory}/jacoco-integration</outputDirectory>
                             <title>Integration Tests Coverage</title>
+                            <excludes>
+                                <exclude>com/FXplore/fx_rate_service/FxRateServiceApplication.class</exclude>
+                            </excludes>
                         </configuration>
                     </execution>
 
@@ -204,6 +218,9 @@
                             <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
                             <outputDirectory>${project.reporting.outputDirectory}/jacoco-merged</outputDirectory>
                             <title>All Tests Coverage (merged)</title>
+                            <excludes>
+                                <exclude>com/FXplore/fx_rate_service/FxRateServiceApplication.class</exclude>
+                            </excludes>
                         </configuration>
                     </execution>
                 </executions>
