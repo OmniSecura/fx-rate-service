@@ -40,7 +40,7 @@ services:
     ports:
       - "8081:8080"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/currencies > /dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/api/currencies > /dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 12
