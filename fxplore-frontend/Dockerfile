@@ -1,10 +1,10 @@
-# ── Stage 1: build React app ──────────────────────────────────────────────────
+ # ── Stage 1: build React app ──────────────────────────────────────────────────
 FROM node:20-alpine AS build
 
 WORKDIR /app
 
 COPY package.json ./
-RUN npm install --legacy-peer-deps
+RUN npm cache clean --force && npm install --legacy-peer-deps
 
 COPY public ./public
 COPY src ./src
