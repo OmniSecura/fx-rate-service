@@ -25,3 +25,10 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Local dev config (contains credentials, not for repo)
+application-local.properties
+
+# Maven build output
+spring-boot-app/target/
+
