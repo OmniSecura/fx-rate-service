@@ -1,53 +1,90 @@
 #!/bin/bash
 
 # db_reload.sh - Database reload utility
-# Safely drops and recreates database from SQL dump file
 #
-# Usage: ./db_reload.sh [database_name] [dump_file]
+# Usage: ./db_reload.sh [OPTIONS]
 #
-# Arguments:
-#   database_name  Database to reload (default: fx_rate_db)
-#   dump_file      SQL dump file (default: fx_rate_dump.sql)
-#
-# Example: ./db_reload.sh fx_rate_db fx_rate_dump.sql
-#
-# How it works:
-#   1. Validates dump file exists
-#   2. Prompts for MySQL root password (hidden input)
-#   3. Drops existing database (or creates if not exists)
-#   4. Creates fresh empty database
-#   5. Loads complete schema and data from dump file
-#   6. Exits on any error (|| exit 1)
-#
-# Notes:
-#   - Password is never stored or logged
-#   - Safe to use in Git Bash on Windows
-#   - Requires MySQL client tools in PATH
+# Options:
+#   -d  Database name    (default: fx_rate_db)
+#   -f  Dump file        (default: fx_rate_dump.sql)
+#   -m  Mode             (default: auto) [auto|docker|local]
+#   -c  Container name   (default: fx-rate-db)
+#   -h  Host             (default: localhost)
+#   -P  Port             (default: 3306)
+#   -u  User             (default: root)
+#   -p  Password         (default: rootpassword)
 
-MYSQL="/c/Program Files/MySQL/MySQL Server 8.0/bin/mysql"
+DB="fx_rate_db"
+DUMP="fx_rate_dump.sql"
+CONTAINER="fx-rate-db"
+HOST="localhost"
+PORT="3306"
+USER="root"
+PASSWORD="rootpassword"
+MODE="auto"
 
-DB=${1:-fx_rate_db}
-DUMP=${2:-fx_rate_dump.sql}
+while getopts "d:f:m:c:h:P:u:p:" opt; do
+    case $opt in
+        d) DB="$OPTARG" ;;
+        f) DUMP="$OPTARG" ;;
+        m) MODE="$OPTARG" ;;
+        c) CONTAINER="$OPTARG" ;;
+        h) HOST="$OPTARG" ;;
+        P) PORT="$OPTARG" ;;
+        u) USER="$OPTARG" ;;
+        p) PASSWORD="$OPTARG" ;;
+        *) echo "Unknown flag: -$OPTARG"; exit 1 ;;
+    esac
+done
 
-# Validate dump file
+# Auto detect mode
+if [ "$MODE" == "auto" ]; then
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER}$"; then
+        MODE="docker"
+    else
+        MODE="local"
+    fi
+fi
+
+# Resolve mysql path for local mode
+if [ "$MODE" == "local" ]; then
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+        MYSQL="/c/Program Files/MySQL/MySQL Server 8.0/bin/mysql"
+    else
+        MYSQL="mysql"
+    fi
+fi
+
 if [ ! -f "$DUMP" ]; then
     echo "✗ Error: Dump file not found: $DUMP"
     exit 1
 fi
 
 echo "➜ Database reload tool"
-echo "  Database: $DB"
-echo "  Source:   $DUMP"
+echo "  Mode:      $MODE"
+[ "$MODE" == "docker" ] && echo "  Container: $CONTAINER"
+[ "$MODE" == "local"  ] && echo "  Host:      $HOST:$PORT"
+echo "  User:      $USER"
+echo "  Database:  $DB"
+echo "  Source:    $DUMP"
 echo ""
 
-# Drop and recreate database
-echo "⏳ Dropping existing database and creating fresh one..."
-"$MYSQL" -u root -p -e "DROP DATABASE IF EXISTS $DB; CREATE DATABASE $DB;" || exit 1
+echo "⏳ Dropping and recreating database..."
+if [ "$MODE" == "docker" ]; then
+    docker exec "$CONTAINER" mysql -u "$USER" -p"$PASSWORD" \
+        -e "DROP DATABASE IF EXISTS $DB; CREATE DATABASE $DB;" || exit 1
+else
+    "$MYSQL" -h "$HOST" -P "$PORT" -u "$USER" -p"$PASSWORD" \
+        -e "DROP DATABASE IF EXISTS $DB; CREATE DATABASE $DB;" || exit 1
+fi
 echo "✓ Database ready"
 
-# Load data from dump
 echo "⏳ Loading schema and data from dump..."
-"$MYSQL" -u root -p "$DB" < "$DUMP" || exit 1
+if [ "$MODE" == "docker" ]; then
+    docker exec -i "$CONTAINER" mysql -u "$USER" -p"$PASSWORD" "$DB" < "$DUMP" || exit 1
+else
+    "$MYSQL" -h "$HOST" -P "$PORT" -u "$USER" -p"$PASSWORD" "$DB" < "$DUMP" || exit 1
+fi
 echo "✓ Data loaded successfully"
 
 echo ""
