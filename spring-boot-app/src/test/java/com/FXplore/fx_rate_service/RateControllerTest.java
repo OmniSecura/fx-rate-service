@@ -7,6 +7,8 @@ import com.FXplore.fx_rate_service.dto.EodFixingResponse;
 import com.FXplore.fx_rate_service.dto.ExchangeRateResponse;
 import com.FXplore.fx_rate_service.exception.CurrencyPairNotFoundException;
 import com.FXplore.fx_rate_service.exception.GlobalExceptionHandler;
+import com.FXplore.fx_rate_service.exception.InvalidExchangeRateException;
+import com.FXplore.fx_rate_service.exception.RateProviderNotFoundException;
 import com.FXplore.fx_rate_service.service.IRateService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -445,5 +447,76 @@ public class RateControllerTest {
                 .andExpect(jsonPath("$.message").value(containsString("XXXXXX")))
                 .andExpect(jsonPath("$.path").value("/api/rates"));
     }
-}
 
+    @Test
+    void postRates_whenRateProviderNotFound_returns404() throws Exception {
+        // Given — service throws RateProviderNotFoundException (unknown providerCode)
+        String body = """
+                {
+                    "pairCode": "EUR/USD",
+                    "providerCode": "UNKNOWN_PROVIDER",
+                    "bid": "1.0800",
+                    "ask": "1.0900",
+                    "mid": "1.0850"
+                }
+                """;
+        doThrow(new RateProviderNotFoundException("Rate provider not found: UNKNOWN_PROVIDER"))
+                .when(rateService).storeRate(eq("EUR/USD"), eq("UNKNOWN_PROVIDER"),
+                        any(), any(), any());
+
+        // When & Then — handleRateProviderNotFound → 404
+        mockMvc.perform(post("/api/rates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value(containsString("UNKNOWN_PROVIDER")));
+    }
+
+    @Test
+    void postRates_whenInvalidExchangeRate_returns400() throws Exception {
+        // Given — service throws InvalidExchangeRateException (e.g. zero rates passed through)
+        String body = """
+                {
+                    "pairCode": "EUR/USD",
+                    "providerCode": "REUTERS",
+                    "bid": "1.0800",
+                    "ask": "1.0900",
+                    "mid": "1.0850"
+                }
+                """;
+        doThrow(new InvalidExchangeRateException("Exchange rates must be positive"))
+                .when(rateService).storeRate(any(), any(), any(), any(), any());
+
+        // When & Then — handleInvalidExchangeRate → 400
+        mockMvc.perform(post("/api/rates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("positive")));
+    }
+
+    @Test
+    void getLatestRate_whenIllegalArgument_returns400() throws Exception {
+        // Given — service throws IllegalArgumentException
+        when(rateService.getLatestRate("BAD_PAIR"))
+                .thenThrow(new IllegalArgumentException("Malformed pair code: BAD_PAIR"));
+
+        // When & Then — handleIllegalArgument → 400
+        mockMvc.perform(get("/api/rates").param("pair", "BAD_PAIR"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("BAD_PAIR")));
+    }
+
+    @Test
+    void getLatestRate_whenUnexpectedException_returns500() throws Exception {
+        // Given — unexpected runtime exception (e.g. DB connection lost)
+        when(rateService.getLatestRate("EUR/USD"))
+                .thenThrow(new RuntimeException("Connection pool exhausted"));
+
+        // When & Then — handleGenericException → 500
+        mockMvc.perform(get("/api/rates").param("pair", "EUR/USD"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value(500))
+                .andExpect(jsonPath("$.message").value("Unexpected server error"));
+    }
+}

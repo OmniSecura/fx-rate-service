@@ -4,6 +4,7 @@ import com.FXplore.fx_rate_service.dao.ICurrencyPairRepository;
 import com.FXplore.fx_rate_service.dao.IEodFixingRepository;
 import com.FXplore.fx_rate_service.dao.IExchangeRateRepository;
 import com.FXplore.fx_rate_service.dao.IRateProviderRepository;
+import com.FXplore.fx_rate_service.dao.ICurrencyRepository;
 import com.FXplore.fx_rate_service.dto.ConversionResponse;
 import com.FXplore.fx_rate_service.dto.EodFixingResponse;
 import com.FXplore.fx_rate_service.dto.ExchangeRateResponse;
@@ -52,6 +53,9 @@ public class RateServiceTest {
 
     @Mock
     private IRateProviderRepository rateProviderRepository;
+
+    @Mock
+    private ICurrencyRepository currencyRepository;
 
     @InjectMocks
     private RateService rateService;
@@ -198,6 +202,23 @@ public class RateServiceTest {
         assertFalse(result.get().isStale()); // Within threshold, not stale
     }
 
+    @Test
+    void getLatestRate_whenRateIsExactlyAtStaleBoundary_returnsIsStaleTrue() {
+        // Given — rate timestamp is just over 4 hours ago (4h + 1 second)
+        eurGbpRate.setRateTimestamp(
+                Instant.now().minus(4, java.time.temporal.ChronoUnit.HOURS).minusSeconds(1));
+        when(currencyPairRepository.findByPairCode("EURGBP")).thenReturn(Optional.of(eurGbpPair));
+        when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurGbpPair))
+                .thenReturn(Optional.of(eurGbpRate));
+
+        // When
+        Optional<ExchangeRateResponse> result = rateService.getLatestRate("EURGBP");
+
+        // Then — just past the 4-hour threshold → stale
+        assertTrue(result.isPresent());
+        assertTrue(result.get().isStale());
+    }
+
     // ----------------------------------------------------------------
     // Unit — Currency Conversion
     // ----------------------------------------------------------------
@@ -289,6 +310,56 @@ public class RateServiceTest {
         // When & Then
         assertThrows(InvalidExchangeRateException.class,
                 () -> rateService.storeRate("GBPUSD", "TEST", bid, ask, mid));
+        verify(exchangeRateRepository, never()).save(any());
+    }
+
+    @Test
+    void storeRate_whenProviderIsECB_setsSourceSystemToECB_FEED() {
+        // Given — ECB provider triggers special source-system mapping
+        RateProvider ecbProvider = new RateProvider();
+        ecbProvider.setId(3);
+        ecbProvider.setProviderCode("ECB");
+
+        BigDecimal bid = new BigDecimal("1.0800");
+        BigDecimal ask = new BigDecimal("1.0900");
+        BigDecimal mid = new BigDecimal("1.0850");
+
+        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(rateProviderRepository.findByProviderCode("ECB")).thenReturn(Optional.of(ecbProvider));
+        when(exchangeRateRepository.save(any(ExchangeRate.class))).thenReturn(null);
+
+        // When
+        rateService.storeRate("EURUSD", "ECB", bid, ask, mid);
+
+        // Then — source system must be "ECB_FEED" for ECB provider (RateService line 90)
+        verify(exchangeRateRepository).save(argThat(rate ->
+                "ECB_FEED".equals(rate.getSourceSystem())
+        ));
+    }
+
+    @Test
+    void storeRate_whenProviderNotFound_throwsRateProviderNotFoundException() {
+        // Given — pair exists but provider code is unknown
+        BigDecimal bid = new BigDecimal("1.2600");
+        BigDecimal ask = new BigDecimal("1.2700");
+        BigDecimal mid = new BigDecimal("1.2650");
+
+        when(currencyPairRepository.findByPairCode("GBPUSD")).thenReturn(Optional.of(gbpUsdPair));
+        when(rateProviderRepository.findByProviderCode("UNKNOWN_PROVIDER"))
+                .thenReturn(Optional.empty());
+
+        // When & Then
+        assertThrows(RateProviderNotFoundException.class,
+                () -> rateService.storeRate("GBPUSD", "UNKNOWN_PROVIDER", bid, ask, mid));
+        verify(exchangeRateRepository, never()).save(any());
+    }
+
+    @Test
+    void storeRate_whenAllRatesAreZero_throwsInvalidExchangeRateException() {
+        // Given — zero values violate the "must be positive" rule
+        assertThrows(InvalidExchangeRateException.class,
+                () -> rateService.storeRate("GBPUSD", "TEST",
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
         verify(exchangeRateRepository, never()).save(any());
     }
 
@@ -413,6 +484,165 @@ public class RateServiceTest {
 
         // When
         Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+
+        // Then
+        assertFalse(result.isPresent());
+    }
+
+    @Test
+    void getEodFixing_whenDeviationExceedsThreshold_deviationBranchExecuted() {
+        // Given — fixing rate deviates >0.5% from the last traded mid rate
+        LocalDate date = LocalDate.of(2026, 3, 25);
+
+        EodFixing fixing = new EodFixing();
+        fixing.setId(1);
+        fixing.setPair(eurUsdPair);
+        fixing.setProvider(provider);
+        fixing.setFixingRate(new BigDecimal("1.09500")); // ~1.1% above lastTraded → triggers WARN
+        fixing.setFixingDate(date);
+        fixing.setFixingTime("16:00 LON");
+        fixing.setFixingType("WMR");
+        fixing.setIsOfficial(true);
+        fixing.setPublishedAt(Instant.parse("2026-03-25T16:05:00Z"));
+
+        // Last traded mid is significantly lower → deviation > 0.5%
+        eurGbpRate.setPair(eurUsdPair);
+        eurGbpRate.setMidRate(new BigDecimal("1.08315"));
+
+        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(eurUsdPair, date))
+                .thenReturn(Optional.of(fixing));
+        when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurUsdPair))
+                .thenReturn(Optional.of(eurGbpRate));
+
+        // When
+        Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+
+        // Then — result present; deviation branch was reached (WARN log emitted internally)
+        assertTrue(result.isPresent());
+        assertEquals(new BigDecimal("1.09500"), result.get().fixingRate());
+    }
+
+    @Test
+    void getEodFixing_whenDeviationBelowThreshold_noAlertBranchTaken() {
+        // Given — fixing rate is only 0.1% away from last traded → no WARN
+        LocalDate date = LocalDate.of(2026, 3, 25);
+
+        EodFixing fixing = new EodFixing();
+        fixing.setId(2);
+        fixing.setPair(eurUsdPair);
+        fixing.setProvider(provider);
+        fixing.setFixingRate(new BigDecimal("1.08325")); // ~0.009% deviation — below threshold
+        fixing.setFixingDate(date);
+        fixing.setFixingTime("16:00 LON");
+        fixing.setFixingType("WMR");
+        fixing.setIsOfficial(true);
+        fixing.setPublishedAt(Instant.parse("2026-03-25T16:05:00Z"));
+
+        eurGbpRate.setPair(eurUsdPair);
+        eurGbpRate.setMidRate(new BigDecimal("1.08315"));
+
+        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(eurUsdPair, date))
+                .thenReturn(Optional.of(fixing));
+        when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurUsdPair))
+                .thenReturn(Optional.of(eurGbpRate));
+
+        // When
+        Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+
+        // Then
+        assertTrue(result.isPresent());
+    }
+
+    // ----------------------------------------------------------------
+    // Unit — Get Stale Rates
+    // ----------------------------------------------------------------
+
+    @Test
+    void getStaleRates_whenStaleRatesExist_returnsNonEmptyListWithIsStaleFlagSet() {
+        // Given — repository returns one stale rate
+        eurGbpRate.setRateTimestamp(Instant.now().minus(5, java.time.temporal.ChronoUnit.HOURS));
+        when(exchangeRateRepository.findStaleRates(any(Instant.class)))
+                .thenReturn(List.of(eurGbpRate));
+
+        // When
+        List<ExchangeRateResponse> result = rateService.getStaleRates();
+
+        // Then — list not empty, isStale flag set to true by the peek() in RateService
+        assertFalse(result.isEmpty());
+        assertTrue(result.get(0).isStale());
+    }
+
+    @Test
+    void getStaleRates_whenNoStaleRates_returnsEmptyList() {
+        // Given
+        when(exchangeRateRepository.findStaleRates(any(Instant.class)))
+                .thenReturn(List.of());
+
+        // When
+        List<ExchangeRateResponse> result = rateService.getStaleRates();
+
+        // Then
+        assertTrue(result.isEmpty());
+    }
+
+    // ----------------------------------------------------------------
+    // Unit — Get All Active Currencies
+    // ----------------------------------------------------------------
+
+    @Test
+    void getAllActiveCurrencies_whenCurrenciesExist_returnsMappedList() {
+        // Given
+        Currency usd = new Currency();
+        usd.setId(1);
+        usd.setIsoCode("USD");
+        usd.setCurrencyName("US Dollar");
+        usd.setCountry("United States");
+        usd.setNumericCode("840");
+        usd.setMinorUnits((short) 2);
+        usd.setIsActive(true);
+        usd.setRegion("AMER");
+
+        when(currencyRepository.findByIsActiveTrue()).thenReturn(List.of(usd));
+
+        // When
+        var result = rateService.getAllActiveCurrencies();
+
+        // Then
+        assertEquals(1, result.size());
+        assertEquals("USD", result.get(0).isoCode());
+        assertTrue(result.get(0).isActive());
+    }
+
+    @Test
+    void getAllActiveCurrencies_whenNoCurrencies_returnsEmptyList() {
+        // Given
+        when(currencyRepository.findByIsActiveTrue()).thenReturn(List.of());
+
+        // When
+        var result = rateService.getAllActiveCurrencies();
+
+        // Then
+        assertTrue(result.isEmpty());
+    }
+
+    // ----------------------------------------------------------------
+    // Unit — Cross Rate (second leg missing)
+    // ----------------------------------------------------------------
+
+    @Test
+    void calculateCrossRate_whenSecondLegMissing_returnsEmpty() {
+        // Given — first leg (EURGBP) present, second leg (GBPUSD) has no rate
+        when(currencyPairRepository.findByPairCode("EURGBP")).thenReturn(Optional.of(eurGbpPair));
+        when(currencyPairRepository.findByPairCode("GBPUSD")).thenReturn(Optional.of(gbpUsdPair));
+        when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurGbpPair))
+                .thenReturn(Optional.of(eurGbpRate));
+        when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(gbpUsdPair))
+                .thenReturn(Optional.empty()); // second leg missing
+
+        // When
+        Optional<BigDecimal> result = rateService.calculateCrossRate("EURUSD", "EURGBP", "GBPUSD");
 
         // Then
         assertFalse(result.isPresent());
