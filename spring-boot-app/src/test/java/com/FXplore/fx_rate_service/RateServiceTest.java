@@ -686,4 +686,179 @@ public class RateServiceTest {
                         CurrencyPairNotFoundException.class)
         );
     }
+
+    // ----------------------------------------------------------------
+    // Unit — getEodFixing missing branches
+    // ----------------------------------------------------------------
+
+    @Test
+    void getEodFixing_whenProviderIsNull_usesUnknownAsSource() {
+        // Covers the false-branch of: f.getProvider() != null ? ... : "UNKNOWN"
+        LocalDate date = LocalDate.of(2026, 3, 25);
+
+        EodFixing fixing = new EodFixing();
+        fixing.setId(10);
+        fixing.setPair(eurUsdPair);
+        fixing.setProvider(null);                          // <-- null provider
+        fixing.setFixingRate(new BigDecimal("1.08315"));
+        fixing.setFixingDate(date);
+        fixing.setFixingTime("16:00 LON");
+        fixing.setFixingType("WMR");
+        fixing.setIsOfficial(true);
+        fixing.setPublishedAt(Instant.parse("2026-03-25T16:05:00Z"));
+
+        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(eurUsdPair, date))
+                .thenReturn(Optional.of(fixing));
+        when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurUsdPair))
+                .thenReturn(Optional.empty());
+
+        // When
+        Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+
+        // Then — result present; "UNKNOWN" source branch was taken (no NPE)
+        assertTrue(result.isPresent());
+    }
+
+    @Test
+    void getEodFixing_whenLastTradedMidIsNull_skipsDeviationCheck() {
+        // Covers the false-branch of: if (lastTraded != null && ...)
+        LocalDate date = LocalDate.of(2026, 3, 25);
+
+        EodFixing fixing = new EodFixing();
+        fixing.setId(11);
+        fixing.setPair(eurUsdPair);
+        fixing.setProvider(provider);
+        fixing.setFixingRate(new BigDecimal("1.08315"));
+        fixing.setFixingDate(date);
+        fixing.setFixingTime("16:00 LON");
+        fixing.setFixingType("WMR");
+        fixing.setIsOfficial(true);
+        fixing.setPublishedAt(Instant.parse("2026-03-25T16:05:00Z"));
+
+        // Exchange rate exists but midRate is null
+        ExchangeRate rateWithNullMid = new ExchangeRate();
+        rateWithNullMid.setPair(eurUsdPair);
+        rateWithNullMid.setMidRate(null);                  // <-- null midRate
+        rateWithNullMid.setRateTimestamp(Instant.now());
+
+        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(eurUsdPair, date))
+                .thenReturn(Optional.of(fixing));
+        when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurUsdPair))
+                .thenReturn(Optional.of(rateWithNullMid));
+
+        // When
+        Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+
+        // Then — no NPE; deviation check skipped
+        assertTrue(result.isPresent());
+    }
+
+    @Test
+    void getEodFixing_whenLastTradedMidIsZero_skipsDeviationCheck() {
+        // Covers the false-branch of: if (... && lastTraded.compareTo(ZERO) > 0)
+        LocalDate date = LocalDate.of(2026, 3, 25);
+
+        EodFixing fixing = new EodFixing();
+        fixing.setId(12);
+        fixing.setPair(eurUsdPair);
+        fixing.setProvider(provider);
+        fixing.setFixingRate(new BigDecimal("1.08315"));
+        fixing.setFixingDate(date);
+        fixing.setFixingTime("16:00 LON");
+        fixing.setFixingType("WMR");
+        fixing.setIsOfficial(true);
+        fixing.setPublishedAt(Instant.parse("2026-03-25T16:05:00Z"));
+
+        // Exchange rate exists but midRate is zero (guard prevents division by zero)
+        ExchangeRate rateWithZeroMid = new ExchangeRate();
+        rateWithZeroMid.setPair(eurUsdPair);
+        rateWithZeroMid.setMidRate(BigDecimal.ZERO);       // <-- zero midRate
+        rateWithZeroMid.setRateTimestamp(Instant.now());
+
+        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(eurUsdPair, date))
+                .thenReturn(Optional.of(fixing));
+        when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurUsdPair))
+                .thenReturn(Optional.of(rateWithZeroMid));
+
+        // When
+        Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+
+        // Then — no division by zero; deviation check skipped
+        assertTrue(result.isPresent());
+    }
+
+    // ----------------------------------------------------------------
+    // Unit — storeRate null-argument branches (line 68 in RateService)
+    // ----------------------------------------------------------------
+
+    @Test
+    void storeRate_whenBidIsNull_throwsInvalidExchangeRateException() {
+        // Covers the true-branch of: if (bid == null || ...)
+        assertThrows(InvalidExchangeRateException.class,
+                () -> rateService.storeRate("GBPUSD", "TEST",
+                        null, new BigDecimal("1.27"), new BigDecimal("1.265")));
+        verify(exchangeRateRepository, never()).save(any());
+    }
+
+    @Test
+    void storeRate_whenAskIsNull_throwsInvalidExchangeRateException() {
+        // Covers the true-branch of: if (... || ask == null || ...)
+        assertThrows(InvalidExchangeRateException.class,
+                () -> rateService.storeRate("GBPUSD", "TEST",
+                        new BigDecimal("1.26"), null, new BigDecimal("1.265")));
+        verify(exchangeRateRepository, never()).save(any());
+    }
+
+    @Test
+    void storeRate_whenMidIsNull_throwsInvalidExchangeRateException() {
+        // Covers the true-branch of: if (... || mid == null)
+        assertThrows(InvalidExchangeRateException.class,
+                () -> rateService.storeRate("GBPUSD", "TEST",
+                        new BigDecimal("1.26"), new BigDecimal("1.27"), null));
+        verify(exchangeRateRepository, never()).save(any());
+    }
+
+    // ----------------------------------------------------------------
+    // Unit — storeRate non-positive rate branches (line 71 in RateService)
+    // Each condition in the || chain is evaluated independently.
+    // ----------------------------------------------------------------
+
+    @Test
+    void storeRate_whenAskIsZero_throwsInvalidExchangeRateException() {
+        // bid > 0 so first condition false → evaluates ask <= 0 → true
+        assertThrows(InvalidExchangeRateException.class,
+                () -> rateService.storeRate("GBPUSD", "TEST",
+                        new BigDecimal("1.26"), BigDecimal.ZERO, new BigDecimal("1.265")));
+        verify(exchangeRateRepository, never()).save(any());
+    }
+
+    @Test
+    void storeRate_whenMidIsNegative_throwsInvalidExchangeRateException() {
+        // bid > 0, ask > 0 → evaluates mid <= 0 → true (negative mid)
+        assertThrows(InvalidExchangeRateException.class,
+                () -> rateService.storeRate("GBPUSD", "TEST",
+                        new BigDecimal("1.26"), new BigDecimal("1.27"), new BigDecimal("-0.01")));
+        verify(exchangeRateRepository, never()).save(any());
+    }
+
+    // ----------------------------------------------------------------
+    // Unit — convertAmount when no rate exists (line 160 in RateService)
+    // ----------------------------------------------------------------
+
+    @Test
+    void convertAmount_whenNoRateExists_returnsEmptyOptional() {
+        // Covers the empty Optional path in exchangeRateRepository.findTop(...).map(...)
+        when(currencyPairRepository.findByPairCode("GBPUSD")).thenReturn(Optional.of(gbpUsdPair));
+        when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(gbpUsdPair))
+                .thenReturn(Optional.empty());
+
+        Optional<ConversionResponse> result =
+                rateService.convertAmount(new BigDecimal("1000"), "GBPUSD");
+
+        assertFalse(result.isPresent(),
+                "convertAmount should return empty when no rate is available for the pair");
+    }
 }

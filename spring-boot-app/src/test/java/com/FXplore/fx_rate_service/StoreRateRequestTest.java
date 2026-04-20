@@ -68,7 +68,11 @@ class StoreRateRequestTest {
                 // Edge: large rate values (JPY pairs)
                 Arguments.of("149.870", "149.875", "149.880", true, "large rate values valid"),
                 // Null values — null-safety: method must return true (nulls handled by @NotNull)
-                Arguments.of(null, null, null, true, "all null returns true (null-safe)")
+                Arguments.of(null, null, null, true, "all null returns true (null-safe)"),
+                // Null mid only — bid is non-null so first condition is false, evaluates mid==null
+                Arguments.of("1.2600", null, "1.2700", true, "mid null returns true (null-safe)"),
+                // Null ask only — bid and mid non-null, evaluates ask==null
+                Arguments.of("1.2600", "1.2650", null, true, "ask null returns true (null-safe)")
         );
     }
 

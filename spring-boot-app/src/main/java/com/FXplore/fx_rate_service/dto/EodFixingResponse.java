@@ -22,7 +22,7 @@ public record EodFixingResponse(
     public static EodFixingResponse from(EodFixing f) {
         return new EodFixingResponse(
                 f.getPair().getPairCode(),
-                f.getProvider().getProviderCode(),
+                f.getProvider() != null ? f.getProvider().getProviderCode() : "UNKNOWN",
                 f.getFixingDate(),
                 f.getFixingRate(),
                 f.getFixingTime(),
