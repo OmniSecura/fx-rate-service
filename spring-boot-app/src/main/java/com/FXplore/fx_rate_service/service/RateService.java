@@ -9,13 +9,13 @@ import com.FXplore.fx_rate_service.dto.ConversionResponse;
 import com.FXplore.fx_rate_service.dto.CurrencyResponse;
 import com.FXplore.fx_rate_service.dto.EodFixingResponse;
 import com.FXplore.fx_rate_service.dto.ExchangeRateResponse;
-import com.FXplore.fx_rate_service.dto.StoreRateRequest;
 import com.FXplore.fx_rate_service.exception.CurrencyPairNotFoundException;
 import com.FXplore.fx_rate_service.exception.InvalidExchangeRateException;
 import com.FXplore.fx_rate_service.exception.RateProviderNotFoundException;
 import com.FXplore.fx_rate_service.model.CurrencyPair;
 import com.FXplore.fx_rate_service.model.ExchangeRate;
 import com.FXplore.fx_rate_service.model.RateProvider;
+import com.FXplore.fx_rate_service.validation.SpreadValidator;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,7 +72,7 @@ public class RateService implements IRateService {
             throw new InvalidExchangeRateException("Exchange rates must be positive");
         }
         // Reuse the same spread rule enforced at the DTO layer (bid < mid < ask)
-        if (!StoreRateRequest.isValidSpread(bid, mid, ask)) {
+        if (!SpreadValidator.isValid(bid, mid, ask)) {
             throw new InvalidExchangeRateException("Bid/ask spread invalid: required bid < mid < ask");
         }
 

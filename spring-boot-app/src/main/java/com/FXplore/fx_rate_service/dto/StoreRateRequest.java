@@ -1,5 +1,6 @@
 package com.FXplore.fx_rate_service.dto;
 
+import com.FXplore.fx_rate_service.validation.SpreadValidator;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -40,22 +41,6 @@ public record StoreRateRequest(
      */
     @AssertTrue(message = "Bid/ask spread invalid: required bid < mid < ask")
     public boolean isSpreadValid() {
-        return isValidSpread(bid, mid, ask);
-    }
-
-    /**
-     * Static spread validator — reusable by the service layer without constructing a full request.
-     * Enforces the FX market rule: bid (buy price) < mid < ask (sell price).
-     *
-     * @param bid  the bid rate
-     * @param mid  the mid rate
-     * @param ask  the ask rate
-     * @return true if bid < mid < ask, false otherwise
-     */
-    public static boolean isValidSpread(BigDecimal bid, BigDecimal mid, BigDecimal ask) {
-        if (bid == null || mid == null || ask == null) {
-            return true; // null checks are handled by @NotNull above
-        }
-        return bid.compareTo(mid) < 0 && mid.compareTo(ask) < 0;
+        return SpreadValidator.isValid(bid, mid, ask);
     }
 }
