@@ -859,7 +859,7 @@ function RatesLookup({ currencies }) {
               <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: 1 }}>Pair</div>
-                  <div style={{ fontFamily: 'var(--font-head)', fontSize: 22, fontWeight: 700, color: '#fff' }}>{result.pairCode}</div>
+                  <div style={{ fontFamily: 'var(--font-head)', fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{result.pairCode}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: 1 }}>Bid</div>
@@ -996,7 +996,7 @@ function Converter({ currencies }) {
                 {Number(result.convertedAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {result.toCurrency}
               </div>
               <div className="result-meta" style={{ marginTop: 10 }}>
-                Rate: <span style={{ color: 'var(--gold2)' }}>{fmt(result.midRate)}</span>
+                Rate: <span style={{ color: 'var(--gold2)' }}>{fmt(result.rate)}</span>
                 &nbsp;·&nbsp; Pair: {result.pairCode}
               </div>
             </div>
@@ -1057,7 +1057,7 @@ function Fixings() {
               <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: 1 }}>Pair</div>
-                  <div style={{ fontFamily: 'var(--font-head)', fontSize: 22, fontWeight: 700, color: '#fff' }}>{result.pairCode}</div>
+                  <div style={{ fontFamily: 'var(--font-head)', fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{result.pairCode}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: 1 }}>Fixing Rate</div>
