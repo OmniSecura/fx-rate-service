@@ -24,6 +24,23 @@ const styles = `
     --font-mono: 'DM Mono', monospace;
   }
 
+  :root.light {
+    --bg:        #f0f4f8;
+    --bg2:       #ffffff;
+    --bg3:       #e8edf3;
+    --border:    #d0d9e4;
+    --border2:   #bfcbd8;
+    --gold:      #b07d1a;
+    --gold2:     #c8950a;
+    --gold-dim:  #e6c97a;
+    --text:      #1a2433;
+    --text-dim:  #4a5e72;
+    --text-mute: #8fa3b8;
+    --green:     #1a9e5e;
+    --red:       #cc3333;
+    --blue:      #2176cc;
+  }
+
   html, body, #root { height: 100%; }
 
   body {
@@ -43,8 +60,8 @@ const styles = `
     left: 0;
     width: 100%;
     height: 100%;
-    background: radial-gradient(circle at 20% 80%, rgba(200, 149, 42, 0.03) 0%, transparent 50%),
-                radial-gradient(circle at 80% 20%, rgba(74, 158, 255, 0.03) 0%, transparent 50%);
+    background: radial-gradient(circle at 20% 80%, rgba(200, 149, 42, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(74, 158, 255, 0.05) 0%, transparent 50%);
     pointer-events: none;
     z-index: -1;
   }
@@ -76,7 +93,7 @@ const styles = `
     font-size: 22px;
     font-weight: 800;
     letter-spacing: -0.5px;
-    color: #fff;
+    color: var(--text);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -136,6 +153,29 @@ const styles = `
     border-left: 1px solid var(--border);
     padding-left: 16px;
     font-family: var(--font-mono);
+  }
+
+  .theme-toggle {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    padding: 5px 12px;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    margin-left: 12px;
+  }
+
+  .theme-toggle:hover {
+    border-color: var(--gold);
+    color: var(--gold2);
+    background: rgba(200,149,42,0.08);
   }
 
   /* SIDEBAR */
@@ -232,7 +272,7 @@ const styles = `
     font-family: var(--font-head);
     font-size: 26px;
     font-weight: 700;
-    color: #fff;
+    color: var(--text);
     letter-spacing: -0.5px;
   }
 
@@ -321,7 +361,7 @@ const styles = `
     font-family: var(--font-head);
     font-size: 28px;
     font-weight: 700;
-    color: #fff;
+    color: var(--text);
     line-height: 1;
   }
 
@@ -361,7 +401,7 @@ const styles = `
 
   .mono { font-family: var(--font-mono); }
   .rate-val { color: var(--gold2); font-weight: 500; }
-  .pair-code { color: #fff; font-weight: 500; font-family: var(--font-head); font-size: 14px; }
+  .pair-code { color: var(--text); font-weight: 500; font-family: var(--font-head); font-size: 14px; }
 
   /* BADGES */
   .badge {
@@ -1198,6 +1238,11 @@ export default function App() {
   const [currLoading, setCurrLoading] = useState(true);
   const [tickerRates, setTickerRates] = useState([]);
   const [now, setNow] = useState(new Date());
+  const [darkMode, setDarkMode] = useState(true);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('light', !darkMode);
+  }, [darkMode]);
 
   useEffect(() => {
     apiFetch('/currencies')
@@ -1252,6 +1297,9 @@ export default function App() {
           <div className="topbar-time">
             UTC {now.toISOString().slice(11, 19)}
           </div>
+          <button className="theme-toggle" onClick={() => setDarkMode(d => !d)}>
+            {darkMode ? '☀ Light' : '◑ Dark'}
+          </button>
         </header>
 
         {/* SIDEBAR */}
