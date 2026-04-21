@@ -1,6 +1,7 @@
 package com.FXplore.fx_rate_service;
 
 import com.FXplore.fx_rate_service.dto.StoreRateRequest;
+import com.FXplore.fx_rate_service.validation.SpreadValidator;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -18,10 +19,10 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for {@link StoreRateRequest}.
+ * Unit tests for {@link StoreRateRequest} and {@link SpreadValidator}.
  *
  * Covers two distinct concerns:
- *   1. {@code isValidSpread()} static method — pure logic, no Spring context needed.
+ *   1. {@link SpreadValidator#isValid} — pure spread logic, no Spring context needed.
  *   2. Bean Validation constraints (@NotNull, @Positive, @AssertTrue) triggered via
  *      the standard Jakarta {@link Validator}, matching what Spring Boot does at
  *      runtime when @Valid is present on the controller method.
@@ -42,11 +43,11 @@ class StoreRateRequestTest {
     }
 
     // ================================================================
-    // isValidSpread() — static helper
+    // SpreadValidator.isValid() — pure domain logic
     // ================================================================
 
     /**
-     * Parametrised cases for {@link StoreRateRequest#isValidSpread}.
+     * Parametrised cases for {@link SpreadValidator#isValid}.
      * Format: bid, mid, ask, expectedResult, scenarioDescription
      */
     static Stream<Arguments> spreadCases() {
@@ -86,7 +87,7 @@ class StoreRateRequestTest {
         BigDecimal mid = midStr != null ? new BigDecimal(midStr) : null;
         BigDecimal ask = askStr != null ? new BigDecimal(askStr) : null;
 
-        assertEquals(expected, StoreRateRequest.isValidSpread(bid, mid, ask),
+        assertEquals(expected, SpreadValidator.isValid(bid, mid, ask),
                 "Scenario: " + scenario);
     }
 
