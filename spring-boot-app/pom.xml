@@ -147,6 +147,8 @@
                             <excludes>
                                 <!-- Bootstrap/demo class — no business logic to measure -->
                                 <exclude>com/FXplore/fx_rate_service/FxRateServiceApplication.class</exclude>
+                                <!-- Micro-demo runners — not business logic -->
+                                <exclude>com/FXplore/fx_rate_service/demo/*</exclude>
                             </excludes>
                         </configuration>
                     </execution>
@@ -160,6 +162,7 @@
                             <title>Unit Tests Coverage</title>
                             <excludes>
                                 <exclude>com/FXplore/fx_rate_service/FxRateServiceApplication.class</exclude>
+                                <exclude>com/FXplore/fx_rate_service/demo/*</exclude>
                             </excludes>
                         </configuration>
                     </execution>
@@ -175,6 +178,8 @@
                             <excludes>
                                 <!-- Bootstrap/demo class — no business logic to measure -->
                                 <exclude>com/FXplore/fx_rate_service/FxRateServiceApplication.class</exclude>
+                                <!-- Micro-demo runners — not business logic -->
+                                <exclude>com/FXplore/fx_rate_service/demo/*</exclude>
                             </excludes>
                         </configuration>
                     </execution>
@@ -188,6 +193,7 @@
                             <title>Integration Tests Coverage</title>
                             <excludes>
                                 <exclude>com/FXplore/fx_rate_service/FxRateServiceApplication.class</exclude>
+                                <exclude>com/FXplore/fx_rate_service/demo/*</exclude>
                             </excludes>
                         </configuration>
                     </execution>
@@ -220,6 +226,7 @@
                             <title>All Tests Coverage (merged)</title>
                             <excludes>
                                 <exclude>com/FXplore/fx_rate_service/FxRateServiceApplication.class</exclude>
+                                <exclude>com/FXplore/fx_rate_service/demo/*</exclude>
                             </excludes>
                         </configuration>
                     </execution>
