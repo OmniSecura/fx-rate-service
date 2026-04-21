@@ -1,9 +1,21 @@
 -- ============================================================
 --  FX Rate Service — DDL
---  Table: currency
+--  Drop order must be reverse of FK dependency chain so that
+--  MySQL does not raise foreign-key constraint violations.
 -- ============================================================
 
+DROP TABLE IF EXISTS rate_audit_log;
+DROP TABLE IF EXISTS rate_alert;
+DROP TABLE IF EXISTS forward_rate;
+DROP TABLE IF EXISTS eod_fixing;
+DROP TABLE IF EXISTS exchange_rate;
+DROP TABLE IF EXISTS currency_pair;
+DROP TABLE IF EXISTS rate_provider;
 DROP TABLE IF EXISTS currency;
+
+-- ============================================================
+--  Table: currency
+-- ============================================================
 
 CREATE TABLE currency (
     currency_id     INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -20,11 +32,9 @@ CREATE TABLE currency (
 );
 
 -- ============================================================
---  FX Rate Service — DDL
 --  Table: rate_provider
 -- ============================================================
 
-DROP TABLE IF EXISTS rate_provider;
 
 CREATE TABLE rate_provider (
     provider_id     INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -40,11 +50,9 @@ CREATE TABLE rate_provider (
 );
 
 -- ============================================================
---  FX Rate Service — DDL
 --  Table: currency_pair
 -- ============================================================
 
-DROP TABLE IF EXISTS currency_pair;
 
 CREATE TABLE currency_pair (
     pair_id         INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -66,11 +74,9 @@ CREATE TABLE currency_pair (
 );
 
 -- ============================================================
---  FX Rate Service — DDL
 --  Table: exchange_rate
 -- ============================================================
 
-DROP TABLE IF EXISTS exchange_rate;
 
 CREATE TABLE exchange_rate (
     rate_id         INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -82,6 +88,9 @@ CREATE TABLE exchange_rate (
     rate_timestamp  TIMESTAMP       NOT NULL,
     source_system   VARCHAR(30)     NOT NULL,   -- REUTERS / BLOOMBERG / ECB_FEED / INTERNAL
     is_valid        BOOLEAN         NOT NULL DEFAULT TRUE,
+    -- is_stale is computed at query time in RateService but stored transiently on the entity;
+    -- the column must exist in the schema so Hibernate can map ExchangeRate.isStale correctly.
+    is_stale        BOOLEAN         NOT NULL DEFAULT FALSE,
 
     FOREIGN KEY (pair_id)     REFERENCES currency_pair(pair_id),
     FOREIGN KEY (provider_id) REFERENCES rate_provider(provider_id),
@@ -95,11 +104,9 @@ CREATE INDEX idx_exrate_pair_ts ON exchange_rate(pair_id, rate_timestamp);
 CREATE INDEX idx_exrate_provider ON exchange_rate(provider_id);
 
 -- ============================================================
---  FX Rate Service — DDL
 --  Table: eod_fixing
 -- ============================================================
 
-DROP TABLE IF EXISTS eod_fixing;
 
 CREATE TABLE eod_fixing (
     fixing_id       INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -125,11 +132,9 @@ CREATE TABLE eod_fixing (
 CREATE INDEX idx_fixing_date ON eod_fixing(fixing_date);
 
 -- ============================================================
---  FX Rate Service — DDL
 --  Table: forward_rate
 -- ============================================================
 
-DROP TABLE IF EXISTS forward_rate;
 
 CREATE TABLE forward_rate (
     forward_id      INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -150,11 +155,9 @@ CREATE TABLE forward_rate (
 );
 
 -- ============================================================
---  FX Rate Service — DDL
 --  Table: rate_alert
 -- ============================================================
 
-DROP TABLE IF EXISTS rate_alert;
 
 CREATE TABLE rate_alert (
     alert_id        INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -178,11 +181,9 @@ CREATE TABLE rate_alert (
 );
 
 -- ============================================================
---  FX Rate Service — DDL
 --  Table: rate_audit_log
 -- ============================================================
 
-DROP TABLE IF EXISTS rate_audit_log;
 
 CREATE TABLE rate_audit_log (
     log_id          INT             NOT NULL AUTO_INCREMENT PRIMARY KEY,
