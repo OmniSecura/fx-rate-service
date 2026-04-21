@@ -24,3 +24,10 @@ jobs:
       - name: Run Maven verify
         working-directory: spring-boot-app
         run: mvn -B clean verify
+
+      - name: Upload JaCoCo merged report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-merged-report
+          path: spring-boot-app/target/site/jacoco-merged/
