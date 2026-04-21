@@ -944,7 +944,7 @@ function Converter({ currencies }) {
       const data = await apiFetch(`/convert?from=${from}&to=${to}&amount=${amount}`);
       setResult(data);
     } catch {
-      setError('Conversion failed — no rate available for this pair');
+      setError('No rate available for this pair — direct rate and cross rates via USD &amp; EUR all unavailable');
     } finally {
       setLoading(false);
     }

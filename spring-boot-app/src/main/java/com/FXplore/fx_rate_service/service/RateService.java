@@ -156,23 +156,90 @@ public class RateService implements IRateService {
     @Override
     @Transactional(readOnly = true)
     public Optional<ConversionResponse> convertAmount(BigDecimal amount, String pairCode) {
-        CurrencyPair pair = getCurrencyPairByCode(pairCode);
-        return exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair)
-                .map(rate -> {
-                    BigDecimal converted = amount.multiply(rate.getMidRate()).setScale(6, RoundingMode.HALF_UP);
-                    log.info("Conversion: {} {} -> {} {} rate={} asOf={}",
-                            amount, pair.getBaseCurrency().getIsoCode(),
-                            converted, pair.getQuoteCurrency().getIsoCode(),
-                            rate.getMidRate(), rate.getRateTimestamp());
-                    return new ConversionResponse(
-                            pair.getBaseCurrency().getIsoCode(),
-                            pair.getQuoteCurrency().getIsoCode(),
-                            amount,
-                            converted,
-                            rate.getMidRate(),
-                            pairCode
-                    );
-                });
+        String[] parts = pairCode.split("/");
+        if (parts.length != 2) {
+            return Optional.empty();
+        }
+        String from = parts[0];
+        String to   = parts[1];
+
+        // 1. Try direct pair FROM/TO
+        Optional<ConversionResponse> direct = tryDirectConversion(amount, from, to, pairCode);
+        if (direct.isPresent()) {
+            return direct;
+        }
+
+        // 2. Fallback: cross rate via USD (FROM/USD × USD/TO)
+        log.info("Direct pair {} not found, attempting cross rate via USD", pairCode);
+        Optional<ConversionResponse> viaUsd = tryCrossConversion(amount, from, to, "USD");
+        if (viaUsd.isPresent()) {
+            return viaUsd;
+        }
+
+        // 3. Fallback: cross rate via EUR (FROM/EUR × EUR/TO)
+        log.info("Cross rate via USD not available for {}, attempting via EUR", pairCode);
+        return tryCrossConversion(amount, from, to, "EUR");
+    }
+
+    /**
+     * Attempt a direct conversion using an existing pair in the database.
+     */
+    private Optional<ConversionResponse> tryDirectConversion(BigDecimal amount, String from, String to, String pairCode) {
+        return currencyPairRepository.findByPairCode(pairCode)
+                .flatMap(pair -> exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair)
+                        .map(rate -> {
+                            BigDecimal converted = amount.multiply(rate.getMidRate()).setScale(6, RoundingMode.HALF_UP);
+                            log.info("Direct conversion: {} {} -> {} {} rate={}", amount, from, converted, to, rate.getMidRate());
+                            return new ConversionResponse(from, to, amount, converted, rate.getMidRate(), pairCode);
+                        }));
+    }
+
+    /**
+     * Attempt a cross rate conversion via an intermediate currency.
+     * E.g. GBP/JPY via USD = GBP/USD × USD/JPY
+     * Handles both FROM/VIA and VIA/FROM (inverted) pairs automatically.
+     */
+    private Optional<ConversionResponse> tryCrossConversion(BigDecimal amount, String from, String to, String via) {
+        if (from.equals(via) || to.equals(via)) {
+            return Optional.empty();
+        }
+
+        Optional<BigDecimal> rateFromVia = getMidRate(from, via);
+        Optional<BigDecimal> rateViaTo   = getMidRate(via, to);
+
+        if (rateFromVia.isEmpty() || rateViaTo.isEmpty()) {
+            return Optional.empty();
+        }
+
+        BigDecimal crossRate = rateFromVia.get()
+                .multiply(rateViaTo.get())
+                .setScale(6, RoundingMode.HALF_UP);
+
+        BigDecimal converted = amount.multiply(crossRate).setScale(6, RoundingMode.HALF_UP);
+        String syntheticPair = from + "/" + to;
+
+        log.info("Cross rate conversion: {} {} -> {} {} via {} rate={} ({}{}={}, {}{}={})",
+                amount, from, converted, to, via,
+                crossRate, from, via, rateFromVia.get(), via, to, rateViaTo.get());
+
+        return Optional.of(new ConversionResponse(from, to, amount, converted, crossRate, syntheticPair));
+    }
+
+    /**
+     * Look up the mid rate for a pair, trying both FROM/TO and TO/FROM (inverted).
+     */
+    private Optional<BigDecimal> getMidRate(String base, String quote) {
+        // Try direct: BASE/QUOTE
+        Optional<BigDecimal> direct = currencyPairRepository.findByPairCode(base + "/" + quote)
+                .flatMap(pair -> exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair))
+                .map(ExchangeRate::getMidRate);
+        if (direct.isPresent()) {
+            return direct;
+        }
+        // Try inverted: QUOTE/BASE → rate = 1 / rate
+        return currencyPairRepository.findByPairCode(quote + "/" + base)
+                .flatMap(pair -> exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair))
+                .map(rate -> BigDecimal.ONE.divide(rate.getMidRate(), 6, RoundingMode.HALF_UP));
     }
 
     @Override
