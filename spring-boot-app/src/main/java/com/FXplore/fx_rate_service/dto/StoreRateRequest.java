@@ -1,6 +1,7 @@
 package com.FXplore.fx_rate_service.dto;
 
 import com.FXplore.fx_rate_service.validation.SpreadValidator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -38,7 +39,9 @@ public record StoreRateRequest(
     /**
      * Validates the FX bid/ask spread: bid < mid < ask.
      * Called automatically by Bean Validation when @Valid is present on the controller method.
+     * @JsonIgnore hides this method from Jackson / Swagger — it is not a JSON field.
      */
+    @JsonIgnore
     @AssertTrue(message = "Bid/ask spread invalid: required bid < mid < ask")
     public boolean isSpreadValid() {
         return SpreadValidator.isValid(bid, mid, ask);
