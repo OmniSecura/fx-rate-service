@@ -1,15 +1,18 @@
 package com.FXplore.fx_rate_service.controller;
 
+import com.FXplore.fx_rate_service.dto.ConversionResponse;
+import com.FXplore.fx_rate_service.dto.CurrencyResponse;
+import com.FXplore.fx_rate_service.dto.EodFixingResponse;
+import com.FXplore.fx_rate_service.dto.ExchangeRateResponse;
 import com.FXplore.fx_rate_service.dto.StoreRateRequest;
-import com.FXplore.fx_rate_service.model.Currency;
-import com.FXplore.fx_rate_service.model.EodFixing;
-import com.FXplore.fx_rate_service.model.ExchangeRate;
 import com.FXplore.fx_rate_service.service.IRateService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -29,16 +32,8 @@ public class RateController {
     /**
      * POST /api/rates
      * Store a new exchange rate.
-     *
-     * Example request body:
-     * {
-     *   "pairCode":     "GBPUSD",
-     *   "providerCode": "REUTERS",
-     *   "bid":          1.2645,
-     *   "ask":          1.2648,
-     *   "mid":          1.2647
-     * }
      */
+    @Operation(tags = "rates", summary = "Store a new exchange rate")
     @PostMapping("/rates")
     public ResponseEntity<Map<String, String>> storeRate(@Valid @RequestBody StoreRateRequest request) {
         rateService.storeRate(
@@ -56,31 +51,33 @@ public class RateController {
     /**
      * GET /api/rates/stale
      * List all pairs with stale rates (no update in 4+ hours).
-     * Declared before /{pair} to avoid route ambiguity.
      */
+    @Operation(tags = "rates", summary = "List all pairs with stale rates")
     @GetMapping("/rates/stale")
-    public ResponseEntity<List<ExchangeRate>> getStaleRates() {
+    public ResponseEntity<List<ExchangeRateResponse>> getStaleRates() {
         return ResponseEntity.ok(rateService.getStaleRates());
     }
 
     /**
-     * GET /api/rates/{pair}
-     * Get the latest rate for a currency pair (e.g. GBPUSD).
+     * GET /api/rates?pair=EUR/USD
+     * Get the latest rate for a currency pair (e.g. EUR/USD).
      */
-    @GetMapping("/rates/{pair}")
-    public ResponseEntity<ExchangeRate> getLatestRate(@PathVariable String pair) {
+    @Operation(tags = "rates", summary = "Get latest rate for a currency pair")
+    @GetMapping("/rates")
+    public ResponseEntity<ExchangeRateResponse> getLatestRate(@RequestParam String pair) {
         return rateService.getLatestRate(pair)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     /**
-     * GET /api/rates/{pair}/history?from=2026-01-01&to=2026-04-16
+     * GET /api/rates/history?pair=EUR/USD&from=2026-01-01&to=2026-04-16
      * Get rate history for a pair within a date range.
      */
-    @GetMapping("/rates/{pair}/history")
-    public ResponseEntity<List<ExchangeRate>> getRateHistory(
-            @PathVariable String pair,
+    @Operation(tags = "rates", summary = "Get rate history for a pair")
+    @GetMapping("/rates/history")
+    public ResponseEntity<List<ExchangeRateResponse>> getRateHistory(
+            @RequestParam String pair,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return ResponseEntity.ok(rateService.getRateHistory(pair, from, to));
@@ -90,30 +87,26 @@ public class RateController {
      * GET /api/convert?from=GBP&to=USD&amount=10000
      * Convert an amount between two currencies using the latest mid rate.
      */
+    @Operation(tags = "conversion", summary = "Convert amount between two currencies")
     @GetMapping("/convert")
-    public ResponseEntity<Map<String, Object>> convertAmount(
+    public ResponseEntity<ConversionResponse> convertAmount(
             @RequestParam String from,
             @RequestParam String to,
             @RequestParam BigDecimal amount) {
-        String pairCode = from + to;
+        String pairCode = from + "/" + to;
         return rateService.convertAmount(amount, pairCode)
-                .<ResponseEntity<Map<String, Object>>>map(converted -> ResponseEntity.ok(Map.of(
-                        "from", from,
-                        "to", to,
-                        "amount", amount,
-                        "converted", converted,
-                        "pair", pairCode
-                )))
+                .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     /**
-     * GET /api/fixings/{pair}?date=2026-04-07
+     * GET /api/fixings?pair=EUR/USD&date=2026-04-07
      * Get the official EOD fixing for a pair on a given date.
      */
-    @GetMapping("/fixings/{pair}")
-    public ResponseEntity<EodFixing> getEodFixing(
-            @PathVariable String pair,
+    @Operation(tags = "fixings", summary = "Get official EOD fixing for a pair on a given date")
+    @GetMapping("/fixings")
+    public ResponseEntity<EodFixingResponse> getEodFixing(
+            @RequestParam String pair,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return rateService.getEodFixing(pair, date)
                 .map(ResponseEntity::ok)
@@ -124,9 +117,9 @@ public class RateController {
      * GET /api/currencies
      * List all active currencies.
      */
+    @Operation(tags = "currencies", summary = "List all active currencies")
     @GetMapping("/currencies")
-    public ResponseEntity<List<Currency>> getAllActiveCurrencies() {
+    public ResponseEntity<List<CurrencyResponse>> getAllActiveCurrencies() {
         return ResponseEntity.ok(rateService.getAllActiveCurrencies());
     }
 }
-

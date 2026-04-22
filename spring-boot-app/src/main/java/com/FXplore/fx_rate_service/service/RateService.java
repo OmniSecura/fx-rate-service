@@ -5,14 +5,17 @@ import com.FXplore.fx_rate_service.dao.ICurrencyRepository;
 import com.FXplore.fx_rate_service.dao.IEodFixingRepository;
 import com.FXplore.fx_rate_service.dao.IExchangeRateRepository;
 import com.FXplore.fx_rate_service.dao.IRateProviderRepository;
+import com.FXplore.fx_rate_service.dto.ConversionResponse;
+import com.FXplore.fx_rate_service.dto.CurrencyResponse;
+import com.FXplore.fx_rate_service.dto.EodFixingResponse;
+import com.FXplore.fx_rate_service.dto.ExchangeRateResponse;
 import com.FXplore.fx_rate_service.exception.CurrencyPairNotFoundException;
 import com.FXplore.fx_rate_service.exception.InvalidExchangeRateException;
 import com.FXplore.fx_rate_service.exception.RateProviderNotFoundException;
-import com.FXplore.fx_rate_service.model.Currency;
 import com.FXplore.fx_rate_service.model.CurrencyPair;
-import com.FXplore.fx_rate_service.model.EodFixing;
 import com.FXplore.fx_rate_service.model.ExchangeRate;
 import com.FXplore.fx_rate_service.model.RateProvider;
+import com.FXplore.fx_rate_service.validation.SpreadValidator;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -41,11 +45,15 @@ public class RateService implements IRateService {
     private final ICurrencyRepository currencyRepository;
 
     private static final int STALE_HOURS = 4;
+    private static final BigDecimal FIXING_DEVIATION_ALERT_THRESHOLD_PCT = new BigDecimal("0.50");
 
     @Override
     public CurrencyPair getCurrencyPairByCode(String pairCode) {
         return currencyPairRepository.findByPairCode(pairCode)
-                .orElseThrow(() -> new CurrencyPairNotFoundException("Currency pair not found: " + pairCode));
+                .orElseThrow(() -> {
+                    log.error("Unknown currency pair: {} not found in reference data", pairCode);
+                    return new CurrencyPairNotFoundException("Currency pair not found: " + pairCode);
+                });
     }
 
     @Override
@@ -63,8 +71,9 @@ public class RateService implements IRateService {
         if (bid.compareTo(BigDecimal.ZERO) <= 0 || ask.compareTo(BigDecimal.ZERO) <= 0 || mid.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidExchangeRateException("Exchange rates must be positive");
         }
-        if (bid.compareTo(ask) >= 0) {
-            throw new InvalidExchangeRateException("Bid rate must be less than ask rate");
+        // Reuse the same spread rule enforced at the DTO layer (bid < mid < ask)
+        if (!SpreadValidator.isValid(bid, mid, ask)) {
+            throw new InvalidExchangeRateException("Bid/ask spread invalid: required bid < mid < ask");
         }
 
         CurrencyPair pair = getCurrencyPairByCode(pairCode);
@@ -88,30 +97,35 @@ public class RateService implements IRateService {
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<ExchangeRate> getLatestRate(String pairCode) {
+    public Optional<ExchangeRateResponse> getLatestRate(String pairCode) {
         CurrencyPair pair = getCurrencyPairByCode(pairCode);
         Optional<ExchangeRate> latest = exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair);
 
         latest.ifPresent(rate -> {
-            boolean isStale = rate.getRateTimestamp()
-                    .isBefore(Instant.now().minus(STALE_HOURS, ChronoUnit.HOURS));
+            Instant now = Instant.now();
+            boolean isStale = rate.getRateTimestamp().isBefore(now.minus(STALE_HOURS, ChronoUnit.HOURS));
             rate.setIsStale(isStale);
             if (isStale) {
-                log.warn("Stale rate detected: pair={} lastUpdated={} age={}h",
-                        pairCode, rate.getRateTimestamp(), STALE_HOURS);
+                Duration age = Duration.between(rate.getRateTimestamp(), now);
+                log.warn("Stale rate detected: pair={} lastUpdated={} age={}h {}m",
+                        pairCode, rate.getRateTimestamp(), age.toHours(), age.minusHours(age.toHours()).toMinutes());
             }
         });
 
-        return latest;
+        return latest.map(ExchangeRateResponse::from);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<ExchangeRate> getRateHistory(String pairCode, LocalDate from, LocalDate to) {
+    public List<ExchangeRateResponse> getRateHistory(String pairCode, LocalDate from, LocalDate to) {
         CurrencyPair pair = getCurrencyPairByCode(pairCode);
         Instant start = from.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant end = to.atTime(23, 59, 59).toInstant(ZoneOffset.UTC);
-        return exchangeRateRepository.findByPairAndRateTimestampBetweenOrderByRateTimestampDesc(pair, start, end);
+        return exchangeRateRepository
+                .findByPairAndRateTimestampBetweenOrderByRateTimestampDesc(pair, start, end)
+                .stream()
+                .map(ExchangeRateResponse::from)
+                .toList();
     }
 
     @Override
@@ -131,7 +145,7 @@ public class RateService implements IRateService {
                 .multiply(rateBC.get().getMidRate())
                 .setScale(6, RoundingMode.HALF_UP);
 
-        log.info("Cross rate calculated: {}={} {}={} → {}={}",
+        log.info("Cross rate calculated: {}={} {}={} -> {}={}",
                 pairCodeAB, rateAB.get().getMidRate(),
                 pairCodeBC, rateBC.get().getMidRate(),
                 pairCodeAC, crossRate);
@@ -141,42 +155,146 @@ public class RateService implements IRateService {
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<BigDecimal> convertAmount(BigDecimal amount, String pairCode) {
+    public Optional<ConversionResponse> convertAmount(BigDecimal amount, String pairCode) {
+        String[] parts = pairCode.split("/");
+        if (parts.length != 2) {
+            return Optional.empty();
+        }
+        String from = parts[0];
+        String to   = parts[1];
+
+        // 1. Try direct pair FROM/TO
+        Optional<ConversionResponse> direct = tryDirectConversion(amount, from, to, pairCode);
+        if (direct.isPresent()) {
+            return direct;
+        }
+
+        // 2. Fallback: cross rate via USD (FROM/USD × USD/TO)
+        log.info("Direct pair {} not found, attempting cross rate via USD", pairCode);
+        Optional<ConversionResponse> viaUsd = tryCrossConversion(amount, from, to, "USD");
+        if (viaUsd.isPresent()) {
+            return viaUsd;
+        }
+
+        // 3. Fallback: cross rate via EUR (FROM/EUR × EUR/TO)
+        log.info("Cross rate via USD not available for {}, attempting via EUR", pairCode);
+        return tryCrossConversion(amount, from, to, "EUR");
+    }
+
+    /**
+     * Attempt a direct conversion using an existing pair in the database.
+     */
+    private Optional<ConversionResponse> tryDirectConversion(BigDecimal amount, String from, String to, String pairCode) {
+        return currencyPairRepository.findByPairCode(pairCode)
+                .flatMap(pair -> exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair)
+                        .map(rate -> {
+                            BigDecimal converted = amount.multiply(rate.getMidRate()).setScale(6, RoundingMode.HALF_UP);
+                            log.info("Direct conversion: {} {} -> {} {} rate={}", amount, from, converted, to, rate.getMidRate());
+                            return new ConversionResponse(from, to, amount, converted, rate.getMidRate(), pairCode);
+                        }));
+    }
+
+    /**
+     * Attempt a cross rate conversion via an intermediate currency.
+     * E.g. GBP/JPY via USD = GBP/USD × USD/JPY
+     * Handles both FROM/VIA and VIA/FROM (inverted) pairs automatically.
+     */
+    private Optional<ConversionResponse> tryCrossConversion(BigDecimal amount, String from, String to, String via) {
+        if (from.equals(via) || to.equals(via)) {
+            return Optional.empty();
+        }
+
+        Optional<BigDecimal> rateFromVia = getMidRate(from, via);
+        Optional<BigDecimal> rateViaTo   = getMidRate(via, to);
+
+        if (rateFromVia.isEmpty() || rateViaTo.isEmpty()) {
+            return Optional.empty();
+        }
+
+        BigDecimal crossRate = rateFromVia.get()
+                .multiply(rateViaTo.get())
+                .setScale(6, RoundingMode.HALF_UP);
+
+        BigDecimal converted = amount.multiply(crossRate).setScale(6, RoundingMode.HALF_UP);
+        String syntheticPair = from + "/" + to;
+
+        log.info("Cross rate conversion: {} {} -> {} {} via {} rate={} ({}{}={}, {}{}={})",
+                amount, from, converted, to, via,
+                crossRate, from, via, rateFromVia.get(), via, to, rateViaTo.get());
+
+        return Optional.of(new ConversionResponse(from, to, amount, converted, crossRate, syntheticPair));
+    }
+
+    /**
+     * Look up the mid rate for a pair, trying both FROM/TO and TO/FROM (inverted).
+     */
+    private Optional<BigDecimal> getMidRate(String base, String quote) {
+        // Try direct: BASE/QUOTE
+        Optional<BigDecimal> direct = currencyPairRepository.findByPairCode(base + "/" + quote)
+                .flatMap(pair -> exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair))
+                .map(ExchangeRate::getMidRate);
+        if (direct.isPresent()) {
+            return direct;
+        }
+        // Try inverted: QUOTE/BASE → rate = 1 / rate
+        return currencyPairRepository.findByPairCode(quote + "/" + base)
+                .flatMap(pair -> exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair))
+                .map(rate -> BigDecimal.ONE.divide(rate.getMidRate(), 6, RoundingMode.HALF_UP));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<EodFixingResponse> getEodFixing(String pairCode, LocalDate date) {
         CurrencyPair pair = getCurrencyPairByCode(pairCode);
-        return exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair)
-                .map(rate -> {
-                    BigDecimal result = amount.multiply(rate.getMidRate()).setScale(6, RoundingMode.HALF_UP);
-                    log.info("Conversion: {} {} → {} {} rate={} asOf={}",
-                            amount, pair.getBaseCurrency().getIsoCode(),
-                            result, pair.getQuoteCurrency().getIsoCode(),
-                            rate.getMidRate(), rate.getRateTimestamp());
-                    return result;
+        return eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(pair, date)
+                .map(f -> {
+                    String source = f.getProvider() != null ? f.getProvider().getProviderCode() : "UNKNOWN";
+                    log.info("EOD fixing stored: pair={} date={} fixingRate={} source={}",
+                            pairCode, f.getFixingDate(), f.getFixingRate(), source);
+
+                    exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(pair).ifPresent(latest -> {
+                        BigDecimal lastTraded = latest.getMidRate();
+                        if (lastTraded != null && lastTraded.compareTo(BigDecimal.ZERO) > 0) {
+                            BigDecimal deviationPct = f.getFixingRate()
+                                    .subtract(lastTraded)
+                                    .abs()
+                                    .divide(lastTraded, 6, RoundingMode.HALF_UP)
+                                    .multiply(new BigDecimal("100"))
+                                    .setScale(2, RoundingMode.HALF_UP);
+                            if (deviationPct.compareTo(FIXING_DEVIATION_ALERT_THRESHOLD_PCT) > 0) {
+                                log.warn("Fixing deviation alert: pair={} fixing={} lastTraded={} deviation={}%%",
+                                        pairCode, f.getFixingRate(), lastTraded, deviationPct);
+                            }
+                        }
+                    });
+
+                    return EodFixingResponse.from(f);
                 });
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<EodFixing> getEodFixing(String pairCode, LocalDate date) {
-        CurrencyPair pair = getCurrencyPairByCode(pairCode);
-        return eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(pair, date);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<ExchangeRate> getStaleRates() {
+    public List<ExchangeRateResponse> getStaleRates() {
         Instant threshold = Instant.now().minus(STALE_HOURS, ChronoUnit.HOURS);
-        List<ExchangeRate> staleRates = exchangeRateRepository.findStaleRates(threshold);
-        staleRates.forEach(rate -> {
-            rate.setIsStale(true);
-            log.warn("Stale rate detected: pair={} lastUpdated={} age={}h",
-                    rate.getPair().getPairCode(), rate.getRateTimestamp(), STALE_HOURS);
-        });
-        return staleRates;
+        return exchangeRateRepository.findStaleRates(threshold)
+                .stream()
+                .peek(rate -> {
+                    rate.setIsStale(true);
+                    Duration age = Duration.between(rate.getRateTimestamp(), Instant.now());
+                    log.warn("Stale rate detected: pair={} lastUpdated={} age={}h {}m",
+                            rate.getPair().getPairCode(), rate.getRateTimestamp(),
+                            age.toHours(), age.minusHours(age.toHours()).toMinutes());
+                })
+                .map(ExchangeRateResponse::from)
+                .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<Currency> getAllActiveCurrencies() {
-        return currencyRepository.findByIsActiveTrue();
+    public List<CurrencyResponse> getAllActiveCurrencies() {
+        return currencyRepository.findByIsActiveTrue()
+                .stream()
+                .map(CurrencyResponse::from)
+                .toList();
     }
 }

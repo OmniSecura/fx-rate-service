@@ -1,5 +1,7 @@
 package com.FXplore.fx_rate_service.dto;
 
+import com.FXplore.fx_rate_service.validation.SpreadValidator;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -7,7 +9,11 @@ import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
 
 /**
- * Request body for POST /api/rates
+ * Request body for POST /api/rates.
+ *
+ * FX spread constraint: bid < mid < ask
+ * In FX markets the bid (buy) price is always lower than the ask (sell) price,
+ * with the mid rate sitting exactly between them.
  */
 public record StoreRateRequest(
 
@@ -28,4 +34,13 @@ public record StoreRateRequest(
         @NotNull(message = "mid is required")
         @Positive(message = "mid must be positive")
         BigDecimal mid
-) {}
+) {
+    /**
+     * Validates the FX bid/ask spread: bid < mid < ask.
+     * Called automatically by Bean Validation when @Valid is present on the controller method.
+     */
+    @AssertTrue(message = "Bid/ask spread invalid: required bid < mid < ask")
+    public boolean isSpreadValid() {
+        return SpreadValidator.isValid(bid, mid, ask);
+    }
+}
