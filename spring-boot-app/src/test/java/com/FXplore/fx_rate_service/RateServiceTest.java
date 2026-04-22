@@ -81,19 +81,19 @@ public class RateServiceTest {
 
         eurGbpPair = new CurrencyPair();
         eurGbpPair.setId(1);
-        eurGbpPair.setPairCode("EURGBP");
+        eurGbpPair.setPairCode("EUR/GBP");
         eurGbpPair.setBaseCurrency(eur);
         eurGbpPair.setQuoteCurrency(gbp);
 
         gbpUsdPair = new CurrencyPair();
         gbpUsdPair.setId(2);
-        gbpUsdPair.setPairCode("GBPUSD");
+        gbpUsdPair.setPairCode("GBP/USD");
         gbpUsdPair.setBaseCurrency(gbp);
         gbpUsdPair.setQuoteCurrency(usd);
 
         eurUsdPair = new CurrencyPair();
         eurUsdPair.setId(3);
-        eurUsdPair.setPairCode("EURUSD");
+        eurUsdPair.setPairCode("EUR/USD");
         eurUsdPair.setBaseCurrency(eur);
         eurUsdPair.setQuoteCurrency(usd);
 
@@ -131,13 +131,13 @@ public class RateServiceTest {
     @Test
     void testCalculateCrossRate_Success() {
         // Given
-        when(currencyPairRepository.findByPairCode("EURGBP")).thenReturn(Optional.of(eurGbpPair));
-        when(currencyPairRepository.findByPairCode("GBPUSD")).thenReturn(Optional.of(gbpUsdPair));
+        when(currencyPairRepository.findByPairCode("EUR/GBP")).thenReturn(Optional.of(eurGbpPair));
+        when(currencyPairRepository.findByPairCode("GBP/USD")).thenReturn(Optional.of(gbpUsdPair));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurGbpPair)).thenReturn(Optional.of(eurGbpRate));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(gbpUsdPair)).thenReturn(Optional.of(gbpUsdRate));
 
         // When
-        Optional<BigDecimal> result = rateService.calculateCrossRate("EURUSD", "EURGBP", "GBPUSD");
+        Optional<BigDecimal> result = rateService.calculateCrossRate("EUR/USD", "EUR/GBP", "GBP/USD");
 
         // Then
         assertTrue(result.isPresent());
@@ -147,12 +147,12 @@ public class RateServiceTest {
     @Test
     void testCalculateCrossRate_MissingLeg() {
         // Given
-        when(currencyPairRepository.findByPairCode("EURGBP")).thenReturn(Optional.of(eurGbpPair));
-        when(currencyPairRepository.findByPairCode("GBPUSD")).thenReturn(Optional.of(gbpUsdPair));
+        when(currencyPairRepository.findByPairCode("EUR/GBP")).thenReturn(Optional.of(eurGbpPair));
+        when(currencyPairRepository.findByPairCode("GBP/USD")).thenReturn(Optional.of(gbpUsdPair));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurGbpPair)).thenReturn(Optional.empty());
 
         // When
-        Optional<BigDecimal> result = rateService.calculateCrossRate("EURUSD", "EURGBP", "GBPUSD");
+        Optional<BigDecimal> result = rateService.calculateCrossRate("EUR/USD", "EUR/GBP", "GBP/USD");
 
         // Then
         assertFalse(result.isPresent());
@@ -161,11 +161,11 @@ public class RateServiceTest {
     @Test
     void testCalculateCrossRate_UnknownPair() {
         // Given
-        when(currencyPairRepository.findByPairCode("EURGBP")).thenReturn(Optional.empty());
+        when(currencyPairRepository.findByPairCode("EUR/GBP")).thenReturn(Optional.empty());
 
         // When & Then
         assertThrows(CurrencyPairNotFoundException.class,
-                () -> rateService.calculateCrossRate("EURUSD", "EURGBP", "GBPUSD"));
+                () -> rateService.calculateCrossRate("EUR/USD", "EUR/GBP", "GBP/USD"));
     }
 
     // ----------------------------------------------------------------
@@ -176,11 +176,11 @@ public class RateServiceTest {
     void testStalenessDetection_Stale() {
         // Given — rate is 5 hours old, threshold is 4 hours
         eurGbpRate.setRateTimestamp(Instant.now().minus(5, java.time.temporal.ChronoUnit.HOURS));
-        when(currencyPairRepository.findByPairCode("EURGBP")).thenReturn(Optional.of(eurGbpPair));
+        when(currencyPairRepository.findByPairCode("EUR/GBP")).thenReturn(Optional.of(eurGbpPair));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurGbpPair)).thenReturn(Optional.of(eurGbpRate));
 
         // When — getLatestRate returns Optional<ExchangeRateResponse> (DTO record)
-        Optional<ExchangeRateResponse> result = rateService.getLatestRate("EURGBP");
+        Optional<ExchangeRateResponse> result = rateService.getLatestRate("EUR/GBP");
 
         // Then
         assertTrue(result.isPresent());
@@ -191,11 +191,11 @@ public class RateServiceTest {
     void testStalenessDetection_Boundary() {
         // Given — rate is 3 hours old, below the 4-hour threshold
         eurGbpRate.setRateTimestamp(Instant.now().minus(3, java.time.temporal.ChronoUnit.HOURS));
-        when(currencyPairRepository.findByPairCode("EURGBP")).thenReturn(Optional.of(eurGbpPair));
+        when(currencyPairRepository.findByPairCode("EUR/GBP")).thenReturn(Optional.of(eurGbpPair));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurGbpPair)).thenReturn(Optional.of(eurGbpRate));
 
         // When
-        Optional<ExchangeRateResponse> result = rateService.getLatestRate("EURGBP");
+        Optional<ExchangeRateResponse> result = rateService.getLatestRate("EUR/GBP");
 
         // Then
         assertTrue(result.isPresent());
@@ -207,12 +207,12 @@ public class RateServiceTest {
         // Given — rate timestamp is just over 4 hours ago (4h + 1 second)
         eurGbpRate.setRateTimestamp(
                 Instant.now().minus(4, java.time.temporal.ChronoUnit.HOURS).minusSeconds(1));
-        when(currencyPairRepository.findByPairCode("EURGBP")).thenReturn(Optional.of(eurGbpPair));
+        when(currencyPairRepository.findByPairCode("EUR/GBP")).thenReturn(Optional.of(eurGbpPair));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurGbpPair))
                 .thenReturn(Optional.of(eurGbpRate));
 
         // When
-        Optional<ExchangeRateResponse> result = rateService.getLatestRate("EURGBP");
+        Optional<ExchangeRateResponse> result = rateService.getLatestRate("EUR/GBP");
 
         // Then — just past the 4-hour threshold → stale
         assertTrue(result.isPresent());
@@ -228,11 +228,11 @@ public class RateServiceTest {
         // Given — 10,000 GBP at 1.2650 = 12,650 USD (brief example)
         BigDecimal amount = new BigDecimal("10000");
         gbpUsdRate.setMidRate(new BigDecimal("1.2650"));
-        when(currencyPairRepository.findByPairCode("GBPUSD")).thenReturn(Optional.of(gbpUsdPair));
+        when(currencyPairRepository.findByPairCode("GBP/USD")).thenReturn(Optional.of(gbpUsdPair));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(gbpUsdPair)).thenReturn(Optional.of(gbpUsdRate));
 
         // When — convertAmount returns Optional<ConversionResponse>
-        Optional<ConversionResponse> result = rateService.convertAmount(amount, "GBPUSD");
+        Optional<ConversionResponse> result = rateService.convertAmount(amount, "GBP/USD");
 
         // Then
         assertTrue(result.isPresent());
@@ -247,11 +247,11 @@ public class RateServiceTest {
         // Given — rate = 1.0 simulates same-currency scenario
         BigDecimal amount = new BigDecimal("100");
         gbpUsdRate.setMidRate(new BigDecimal("1.0"));
-        when(currencyPairRepository.findByPairCode("GBPUSD")).thenReturn(Optional.of(gbpUsdPair));
+        when(currencyPairRepository.findByPairCode("GBP/USD")).thenReturn(Optional.of(gbpUsdPair));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(gbpUsdPair)).thenReturn(Optional.of(gbpUsdRate));
 
         // When
-        Optional<ConversionResponse> result = rateService.convertAmount(amount, "GBPUSD");
+        Optional<ConversionResponse> result = rateService.convertAmount(amount, "GBP/USD");
 
         // Then
         assertTrue(result.isPresent());
@@ -268,12 +268,12 @@ public class RateServiceTest {
         BigDecimal bid = new BigDecimal("1.2600");
         BigDecimal ask = new BigDecimal("1.2700");
         BigDecimal mid = new BigDecimal("1.2650");
-        when(currencyPairRepository.findByPairCode("GBPUSD")).thenReturn(Optional.of(gbpUsdPair));
+        when(currencyPairRepository.findByPairCode("GBP/USD")).thenReturn(Optional.of(gbpUsdPair));
         when(rateProviderRepository.findByProviderCode("TEST")).thenReturn(Optional.of(provider));
         when(exchangeRateRepository.save(any(ExchangeRate.class))).thenReturn(null);
 
         // When
-        rateService.storeRate("GBPUSD", "TEST", bid, ask, mid);
+        rateService.storeRate("GBP/USD", "TEST", bid, ask, mid);
 
         // Then — verify correct bid/ask/mid and associations were persisted
         verify(exchangeRateRepository).save(argThat(rate ->
@@ -296,7 +296,7 @@ public class RateServiceTest {
 
         // When & Then
         assertThrows(InvalidExchangeRateException.class,
-                () -> rateService.storeRate("GBPUSD", "TEST", bid, ask, mid));
+                () -> rateService.storeRate("GBP/USD", "TEST", bid, ask, mid));
         verify(exchangeRateRepository, never()).save(any());
     }
 
@@ -309,7 +309,7 @@ public class RateServiceTest {
 
         // When & Then
         assertThrows(InvalidExchangeRateException.class,
-                () -> rateService.storeRate("GBPUSD", "TEST", bid, ask, mid));
+                () -> rateService.storeRate("GBP/USD", "TEST", bid, ask, mid));
         verify(exchangeRateRepository, never()).save(any());
     }
 
@@ -324,12 +324,12 @@ public class RateServiceTest {
         BigDecimal ask = new BigDecimal("1.0900");
         BigDecimal mid = new BigDecimal("1.0850");
 
-        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(currencyPairRepository.findByPairCode("EUR/USD")).thenReturn(Optional.of(eurUsdPair));
         when(rateProviderRepository.findByProviderCode("ECB")).thenReturn(Optional.of(ecbProvider));
         when(exchangeRateRepository.save(any(ExchangeRate.class))).thenReturn(null);
 
         // When
-        rateService.storeRate("EURUSD", "ECB", bid, ask, mid);
+        rateService.storeRate("EUR/USD", "ECB", bid, ask, mid);
 
         // Then — source system must be "ECB_FEED" for ECB provider (RateService line 90)
         verify(exchangeRateRepository).save(argThat(rate ->
@@ -344,13 +344,13 @@ public class RateServiceTest {
         BigDecimal ask = new BigDecimal("1.2700");
         BigDecimal mid = new BigDecimal("1.2650");
 
-        when(currencyPairRepository.findByPairCode("GBPUSD")).thenReturn(Optional.of(gbpUsdPair));
+        when(currencyPairRepository.findByPairCode("GBP/USD")).thenReturn(Optional.of(gbpUsdPair));
         when(rateProviderRepository.findByProviderCode("UNKNOWN_PROVIDER"))
                 .thenReturn(Optional.empty());
 
         // When & Then
         assertThrows(RateProviderNotFoundException.class,
-                () -> rateService.storeRate("GBPUSD", "UNKNOWN_PROVIDER", bid, ask, mid));
+                () -> rateService.storeRate("GBP/USD", "UNKNOWN_PROVIDER", bid, ask, mid));
         verify(exchangeRateRepository, never()).save(any());
     }
 
@@ -358,7 +358,7 @@ public class RateServiceTest {
     void storeRate_whenAllRatesAreZero_throwsInvalidExchangeRateException() {
         // Given — zero values violate the "must be positive" rule
         assertThrows(InvalidExchangeRateException.class,
-                () -> rateService.storeRate("GBPUSD", "TEST",
+                () -> rateService.storeRate("GBP/USD", "TEST",
                         BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
         verify(exchangeRateRepository, never()).save(any());
     }
@@ -370,11 +370,11 @@ public class RateServiceTest {
     @Test
     void testRateRetrieval_Fallback() {
         // Given — no rate exists for pair
-        when(currencyPairRepository.findByPairCode("EURGBP")).thenReturn(Optional.of(eurGbpPair));
+        when(currencyPairRepository.findByPairCode("EUR/GBP")).thenReturn(Optional.of(eurGbpPair));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurGbpPair)).thenReturn(Optional.empty());
 
         // When — returns Optional<ExchangeRateResponse>
-        Optional<ExchangeRateResponse> result = rateService.getLatestRate("EURGBP");
+        Optional<ExchangeRateResponse> result = rateService.getLatestRate("EUR/GBP");
 
         // Then
         assertFalse(result.isPresent());
@@ -385,12 +385,12 @@ public class RateServiceTest {
         // Given
         LocalDate from = LocalDate.now();
         LocalDate to = LocalDate.now().plusDays(1);
-        when(currencyPairRepository.findByPairCode("EURGBP")).thenReturn(Optional.of(eurGbpPair));
+        when(currencyPairRepository.findByPairCode("EUR/GBP")).thenReturn(Optional.of(eurGbpPair));
         when(exchangeRateRepository.findByPairAndRateTimestampBetweenOrderByRateTimestampDesc(
                 eq(eurGbpPair), any(Instant.class), any(Instant.class))).thenReturn(List.of());
 
         // When — returns List<ExchangeRateResponse>
-        List<ExchangeRateResponse> result = rateService.getRateHistory("EURGBP", from, to);
+        List<ExchangeRateResponse> result = rateService.getRateHistory("EUR/GBP", from, to);
 
         // Then
         assertTrue(result.isEmpty());
@@ -402,9 +402,9 @@ public class RateServiceTest {
 
     @Test
     void testGetCurrencyPairByCode_Success() {
-        when(currencyPairRepository.findByPairCode("EURGBP")).thenReturn(Optional.of(eurGbpPair));
+        when(currencyPairRepository.findByPairCode("EUR/GBP")).thenReturn(Optional.of(eurGbpPair));
 
-        CurrencyPair result = rateService.getCurrencyPairByCode("EURGBP");
+        CurrencyPair result = rateService.getCurrencyPairByCode("EUR/GBP");
 
         assertEquals(eurGbpPair, result);
     }
@@ -456,7 +456,7 @@ public class RateServiceTest {
         fixing.setIsOfficial(true);
         fixing.setPublishedAt(Instant.parse("2026-03-25T16:05:00Z"));
 
-        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(currencyPairRepository.findByPairCode("EUR/USD")).thenReturn(Optional.of(eurUsdPair));
         when(eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(eurUsdPair, date))
                 .thenReturn(Optional.of(fixing));
         // Stub deviation check inside getEodFixing
@@ -464,12 +464,12 @@ public class RateServiceTest {
                 .thenReturn(Optional.empty());
 
         // When — returns Optional<EodFixingResponse>
-        Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+        Optional<EodFixingResponse> result = rateService.getEodFixing("EUR/USD", date);
 
         // Then
         assertTrue(result.isPresent());
         assertEquals(new BigDecimal("1.08315"), result.get().fixingRate());
-        assertEquals("EURUSD", result.get().pairCode());
+        assertEquals("EUR/USD", result.get().pairCode());
         assertEquals("WMR", result.get().fixingType());
         assertEquals(date, result.get().fixingDate());
     }
@@ -478,12 +478,12 @@ public class RateServiceTest {
     void testGetEodFixing_NotFound() {
         // Given
         LocalDate date = LocalDate.now();
-        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(currencyPairRepository.findByPairCode("EUR/USD")).thenReturn(Optional.of(eurUsdPair));
         when(eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(eurUsdPair, date))
                 .thenReturn(Optional.empty());
 
         // When
-        Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+        Optional<EodFixingResponse> result = rateService.getEodFixing("EUR/USD", date);
 
         // Then
         assertFalse(result.isPresent());
@@ -509,14 +509,14 @@ public class RateServiceTest {
         eurGbpRate.setPair(eurUsdPair);
         eurGbpRate.setMidRate(new BigDecimal("1.08315"));
 
-        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(currencyPairRepository.findByPairCode("EUR/USD")).thenReturn(Optional.of(eurUsdPair));
         when(eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(eurUsdPair, date))
                 .thenReturn(Optional.of(fixing));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurUsdPair))
                 .thenReturn(Optional.of(eurGbpRate));
 
         // When
-        Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+        Optional<EodFixingResponse> result = rateService.getEodFixing("EUR/USD", date);
 
         // Then — result present; deviation branch was reached (WARN log emitted internally)
         assertTrue(result.isPresent());
@@ -542,14 +542,14 @@ public class RateServiceTest {
         eurGbpRate.setPair(eurUsdPair);
         eurGbpRate.setMidRate(new BigDecimal("1.08315"));
 
-        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(currencyPairRepository.findByPairCode("EUR/USD")).thenReturn(Optional.of(eurUsdPair));
         when(eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(eurUsdPair, date))
                 .thenReturn(Optional.of(fixing));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurUsdPair))
                 .thenReturn(Optional.of(eurGbpRate));
 
         // When
-        Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+        Optional<EodFixingResponse> result = rateService.getEodFixing("EUR/USD", date);
 
         // Then
         assertTrue(result.isPresent());
@@ -633,16 +633,16 @@ public class RateServiceTest {
 
     @Test
     void calculateCrossRate_whenSecondLegMissing_returnsEmpty() {
-        // Given — first leg (EURGBP) present, second leg (GBPUSD) has no rate
-        when(currencyPairRepository.findByPairCode("EURGBP")).thenReturn(Optional.of(eurGbpPair));
-        when(currencyPairRepository.findByPairCode("GBPUSD")).thenReturn(Optional.of(gbpUsdPair));
+        // Given — first leg (EUR/GBP) present, second leg (GBP/USD) has no rate
+        when(currencyPairRepository.findByPairCode("EUR/GBP")).thenReturn(Optional.of(eurGbpPair));
+        when(currencyPairRepository.findByPairCode("GBP/USD")).thenReturn(Optional.of(gbpUsdPair));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurGbpPair))
                 .thenReturn(Optional.of(eurGbpRate));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(gbpUsdPair))
                 .thenReturn(Optional.empty()); // second leg missing
 
         // When
-        Optional<BigDecimal> result = rateService.calculateCrossRate("EURUSD", "EURGBP", "GBPUSD");
+        Optional<BigDecimal> result = rateService.calculateCrossRate("EUR/USD", "EUR/GBP", "GBP/USD");
 
         // Then
         assertFalse(result.isPresent());
@@ -655,9 +655,9 @@ public class RateServiceTest {
     @ParameterizedTest
     @MethodSource("edgeCaseProvider")
     void testEdgeCases(BigDecimal amount, String pairCode, boolean shouldThrow,
-                       Class<? extends Exception> exceptionClass) {
+                       boolean expectedPresent, Class<? extends Exception> exceptionClass) {
         // Given
-        if ("UNKNOWN".equals(pairCode)) {
+        if ("ABC/XYZ".equals(pairCode)) {
             when(currencyPairRepository.findByPairCode(pairCode)).thenReturn(Optional.empty());
         } else {
             when(currencyPairRepository.findByPairCode(pairCode)).thenReturn(Optional.of(gbpUsdPair));
@@ -669,21 +669,23 @@ public class RateServiceTest {
         if (shouldThrow) {
             assertThrows(exceptionClass, () -> rateService.convertAmount(amount, pairCode));
         } else {
-            // convertAmount returns Optional<ConversionResponse>
             Optional<ConversionResponse> result = rateService.convertAmount(amount, pairCode);
-            assertTrue(result.isPresent());
-            if (amount.compareTo(BigDecimal.ZERO) == 0) {
-                assertEquals(new BigDecimal("0.000000"), result.get().convertedAmount());
+            if (expectedPresent) {
+                assertTrue(result.isPresent());
+                if (amount.compareTo(BigDecimal.ZERO) == 0) {
+                    assertEquals(new BigDecimal("0.000000"), result.get().convertedAmount());
+                }
+            } else {
+                assertFalse(result.isPresent());
             }
         }
     }
 
     static Stream<Arguments> edgeCaseProvider() {
         return Stream.of(
-                Arguments.of(BigDecimal.ZERO, "GBPUSD", false, null),                          // Zero amount
-                Arguments.of(new BigDecimal("100"), "GBPUSD", false, null),                    // Normal case
-                Arguments.of(new BigDecimal("100"), "UNKNOWN", true,                           // Unknown pair
-                        CurrencyPairNotFoundException.class)
+                Arguments.of(BigDecimal.ZERO, "GBP/USD", false, true, null),                          // Zero amount
+                Arguments.of(new BigDecimal("100"), "GBP/USD", false, true, null),                    // Normal case
+                Arguments.of(new BigDecimal("100"), "ABC/XYZ", false, false, null)
         );
     }
 
@@ -707,14 +709,14 @@ public class RateServiceTest {
         fixing.setIsOfficial(true);
         fixing.setPublishedAt(Instant.parse("2026-03-25T16:05:00Z"));
 
-        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(currencyPairRepository.findByPairCode("EUR/USD")).thenReturn(Optional.of(eurUsdPair));
         when(eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(eurUsdPair, date))
                 .thenReturn(Optional.of(fixing));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurUsdPair))
                 .thenReturn(Optional.empty());
 
         // When
-        Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+        Optional<EodFixingResponse> result = rateService.getEodFixing("EUR/USD", date);
 
         // Then — result present; "UNKNOWN" source branch was taken (no NPE)
         assertTrue(result.isPresent());
@@ -742,14 +744,14 @@ public class RateServiceTest {
         rateWithNullMid.setMidRate(null);                  // <-- null midRate
         rateWithNullMid.setRateTimestamp(Instant.now());
 
-        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(currencyPairRepository.findByPairCode("EUR/USD")).thenReturn(Optional.of(eurUsdPair));
         when(eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(eurUsdPair, date))
                 .thenReturn(Optional.of(fixing));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurUsdPair))
                 .thenReturn(Optional.of(rateWithNullMid));
 
         // When
-        Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+        Optional<EodFixingResponse> result = rateService.getEodFixing("EUR/USD", date);
 
         // Then — no NPE; deviation check skipped
         assertTrue(result.isPresent());
@@ -777,14 +779,14 @@ public class RateServiceTest {
         rateWithZeroMid.setMidRate(BigDecimal.ZERO);       // <-- zero midRate
         rateWithZeroMid.setRateTimestamp(Instant.now());
 
-        when(currencyPairRepository.findByPairCode("EURUSD")).thenReturn(Optional.of(eurUsdPair));
+        when(currencyPairRepository.findByPairCode("EUR/USD")).thenReturn(Optional.of(eurUsdPair));
         when(eodFixingRepository.findByPairAndFixingDateAndIsOfficialTrue(eurUsdPair, date))
                 .thenReturn(Optional.of(fixing));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(eurUsdPair))
                 .thenReturn(Optional.of(rateWithZeroMid));
 
         // When
-        Optional<EodFixingResponse> result = rateService.getEodFixing("EURUSD", date);
+        Optional<EodFixingResponse> result = rateService.getEodFixing("EUR/USD", date);
 
         // Then — no division by zero; deviation check skipped
         assertTrue(result.isPresent());
@@ -798,7 +800,7 @@ public class RateServiceTest {
     void storeRate_whenBidIsNull_throwsInvalidExchangeRateException() {
         // Covers the true-branch of: if (bid == null || ...)
         assertThrows(InvalidExchangeRateException.class,
-                () -> rateService.storeRate("GBPUSD", "TEST",
+                () -> rateService.storeRate("GBP/USD", "TEST",
                         null, new BigDecimal("1.27"), new BigDecimal("1.265")));
         verify(exchangeRateRepository, never()).save(any());
     }
@@ -807,7 +809,7 @@ public class RateServiceTest {
     void storeRate_whenAskIsNull_throwsInvalidExchangeRateException() {
         // Covers the true-branch of: if (... || ask == null || ...)
         assertThrows(InvalidExchangeRateException.class,
-                () -> rateService.storeRate("GBPUSD", "TEST",
+                () -> rateService.storeRate("GBP/USD", "TEST",
                         new BigDecimal("1.26"), null, new BigDecimal("1.265")));
         verify(exchangeRateRepository, never()).save(any());
     }
@@ -816,7 +818,7 @@ public class RateServiceTest {
     void storeRate_whenMidIsNull_throwsInvalidExchangeRateException() {
         // Covers the true-branch of: if (... || mid == null)
         assertThrows(InvalidExchangeRateException.class,
-                () -> rateService.storeRate("GBPUSD", "TEST",
+                () -> rateService.storeRate("GBP/USD", "TEST",
                         new BigDecimal("1.26"), new BigDecimal("1.27"), null));
         verify(exchangeRateRepository, never()).save(any());
     }
@@ -830,7 +832,7 @@ public class RateServiceTest {
     void storeRate_whenAskIsZero_throwsInvalidExchangeRateException() {
         // bid > 0 so first condition false → evaluates ask <= 0 → true
         assertThrows(InvalidExchangeRateException.class,
-                () -> rateService.storeRate("GBPUSD", "TEST",
+                () -> rateService.storeRate("GBP/USD", "TEST",
                         new BigDecimal("1.26"), BigDecimal.ZERO, new BigDecimal("1.265")));
         verify(exchangeRateRepository, never()).save(any());
     }
@@ -839,7 +841,7 @@ public class RateServiceTest {
     void storeRate_whenMidIsNegative_throwsInvalidExchangeRateException() {
         // bid > 0, ask > 0 → evaluates mid <= 0 → true (negative mid)
         assertThrows(InvalidExchangeRateException.class,
-                () -> rateService.storeRate("GBPUSD", "TEST",
+                () -> rateService.storeRate("GBP/USD", "TEST",
                         new BigDecimal("1.26"), new BigDecimal("1.27"), new BigDecimal("-0.01")));
         verify(exchangeRateRepository, never()).save(any());
     }
@@ -851,12 +853,12 @@ public class RateServiceTest {
     @Test
     void convertAmount_whenNoRateExists_returnsEmptyOptional() {
         // Covers the empty Optional path in exchangeRateRepository.findTop(...).map(...)
-        when(currencyPairRepository.findByPairCode("GBPUSD")).thenReturn(Optional.of(gbpUsdPair));
+        when(currencyPairRepository.findByPairCode("GBP/USD")).thenReturn(Optional.of(gbpUsdPair));
         when(exchangeRateRepository.findTopByPairOrderByRateTimestampDesc(gbpUsdPair))
                 .thenReturn(Optional.empty());
 
         Optional<ConversionResponse> result =
-                rateService.convertAmount(new BigDecimal("1000"), "GBPUSD");
+                rateService.convertAmount(new BigDecimal("1000"), "GBP/USD");
 
         assertFalse(result.isPresent(),
                 "convertAmount should return empty when no rate is available for the pair");
